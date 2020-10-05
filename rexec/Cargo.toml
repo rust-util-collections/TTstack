@@ -1,7 +1,7 @@
 [package]
 edition = "2018"
 name = "ttrexec"
-version = "0.2.9"
+version = "0.2.10"
 authors = ["fanhui <hui.fan@mail.ru>"]
 description = "Execute remote commands at a fairly fast speed."
 

@@ -1,6 +1,6 @@
 [package]
 name = "tt"
-version = "0.2.9"
+version = "0.2.10"
 authors = ["范辉 <fanhui.x@gmail.com>"]
 edition = "2018"
 
