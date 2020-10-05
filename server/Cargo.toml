@@ -1,0 +1,32 @@
+[package]
+name = "ttserver"
+version = "0.2.9"
+authors = ["范辉 <fanhui.x@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+nix = "0.18"
+clap = "2.33"
+lazy_static = "1.4"
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+flate2 = "1.0"
+
+futures = { version = "0.3.5", features = ["thread-pool"] }
+futures-timer = "3.0.2"
+
+num_cpus = "1.13"
+parking_lot = "0.11"
+
+ttcore = { path = "../core", default-features = false }
+ttserver_def = { path = "../server_def" }
+
+myutil = { git = "https://gitee.com/kt10/myutil", branch = "master" }
+
+[features]
+default = [ "nft", "zfs" ]
+cow = [ "ttcore/cow" ]
+nft = [ "ttcore/nft" ]
+zfs = [ "ttcore/zfs" ]
+testmock = [ "ttcore/testmock" ]

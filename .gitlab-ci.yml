@@ -1,0 +1,12 @@
+image: dev:v0.3
+
+stages:
+  - build
+
+job_stable_latest:
+  stage: build
+  script:
+    - make lint
+    - make test
+  tags:
+    - rust

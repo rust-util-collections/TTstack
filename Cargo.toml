@@ -1,0 +1,24 @@
+[workspace]
+members = [
+    "core_def",
+    "core",
+    "server_def",
+    "server",
+    "proxy",
+    "client",
+    "rexec",
+]
+
+[profile.dev]
+overflow-checks = true
+panic = "unwind"
+
+[profile.release]
+lto = true
+incremental = false
+overflow-checks = false
+panic = "unwind"
+
+[profile.bench]
+codegen-units = 1
+overflow-checks = false

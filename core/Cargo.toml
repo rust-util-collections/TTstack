@@ -1,0 +1,26 @@
+[package]
+name = "ttcore"
+version = "0.2.9"
+authors = ["范辉 <fanhui.x@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+nix = "0.18"
+libc = "0.2"
+lazy_static = "1.4"
+parking_lot = "0.11"
+ttcore_def = { path = "../core_def" }
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+myutil = { git = "https://gitee.com/kt10/myutil", branch = "master" }
+futures = { version = "0.3.5", features = ["thread-pool"] }
+futures-timer = "3.0.2"
+
+[features]
+default = [ "nft", "zfs" ]
+cow = []
+nft = []
+zfs = []
+testmock = []

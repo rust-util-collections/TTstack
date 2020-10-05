@@ -1,0 +1,28 @@
+[package]
+edition = "2018"
+name = "ttrexec"
+version = "0.2.9"
+authors = ["fanhui <hui.fan@mail.ru>"]
+description = "Execute remote commands at a fairly fast speed."
+
+[dependencies]
+nix = "0.18"
+clap = "2.33"
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+jemallocator = { optional = true, version = "0.3.2" }
+
+myutil = { git = "https://gitee.com/kt10/myutil", branch = "master" }
+
+[features]
+default = [ "server", "client" ]
+server = [ "jemallocator" ]
+client = []
+
+[[bin]]
+name = "ttrexec-daemon"
+path = "src/bin/daemon.rs"
+
+[[bin]]
+name = "ttrexec-cli"
+path = "src/bin/cli.rs"
