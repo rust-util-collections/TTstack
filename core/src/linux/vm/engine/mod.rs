@@ -1,9 +1,9 @@
 mod firecracker;
 mod qemu;
 
-use crate::{linux::CLONE_MARK, Vm, VmKind};
+use crate::{Vm, VmKind};
 use myutil::{err::*, *};
-use std::{fs, path::PathBuf};
+use std::fs;
 
 // TODO: support more vm-engine
 #[inline(always)]

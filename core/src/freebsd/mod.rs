@@ -9,33 +9,13 @@
 pub(crate) mod nat;
 pub(crate) mod vm;
 
-use crate::{CLONE_MARK, ImagePath, OsName, Vm, VmId, VmKind};
-use lazy_static::lazy_static;
+use crate::{ImagePath, OsName, Vm, VmId, VmKind, CLONE_MARK};
 use myutil::{err::*, *};
 use std::collections::HashMap;
 use std::{
     fs,
     path::{Path, PathBuf},
 };
-
-lazy_static! {
-    static ref ZFS_ROOT: &'static str = pnk!(imgroot_register(None));
-}
-
-fn imgroot_register(imgpath: Option<&str>) -> Option<&'static str> {
-    static mut ROOT: Option<String> = None;
-    if let Some(path) = imgpath {
-        unsafe {
-            ROOT.replace(
-                path.trim_start_matches("/dev/zvol/")
-                    .trim_end_matches('/')
-                    .to_owned(),
-            );
-        }
-    }
-
-    unsafe { ROOT.as_deref() }
-}
 
 /////////////////
 // Entry Point //

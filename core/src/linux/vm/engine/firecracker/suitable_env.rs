@@ -130,7 +130,7 @@ pub(super) fn set_tap(vm: &Vm) -> Result<()> {
 }
 
 mod vmcfg {
-    use crate::{vmimg_path, linux::vm::Vm};
+    use crate::{linux::vm::Vm, vmimg_path};
     use myutil::{err::*, *};
     use serde::Serialize;
 

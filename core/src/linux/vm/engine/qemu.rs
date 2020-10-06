@@ -2,15 +2,14 @@
 //! # Qemu Virtual Machine
 //!
 
-#[cfg(feature = "zfs")]
-use crate::linux::{CLONE_MARK, ZFS_ROOT};
 #[cfg(any(feature = "zfs", feature = "nft"))]
 use crate::{asleep, POOL};
 use crate::{
-    vmimg_path,
     linux::vm::{cmd_exec, util::wait_pid},
-    Vm,
+    vmimg_path, Vm,
 };
+#[cfg(feature = "zfs")]
+use crate::{CLONE_MARK, ZFS_ROOT};
 use lazy_static::lazy_static;
 use myutil::{err::*, *};
 use std::fs;

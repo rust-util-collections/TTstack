@@ -2,7 +2,7 @@
 //! # 基本类型定义
 //!
 
-use crate::{nat, pause, resume, vm};
+use crate::{nat, pause, resume, vm, vmimg_path};
 use lazy_static::lazy_static;
 use myutil::{err::*, *};
 use parking_lot::{Mutex, RwLock};
@@ -19,9 +19,6 @@ pub(crate) use ttcore_def::*;
 const MAX_LIFE_TIME: u64 = 6 * 3600;
 // `tt env start/stop ...` 最小间隔 20 秒
 const MIN_START_STOP_ITV: u64 = 20;
-
-#[cfg(not(feature = "test_mock"))]
-const CLONE_MARK: &str = "clone_";
 
 /// eg: "QEMU:CentOS-7.2:default"
 pub type OsName = String;
@@ -553,29 +550,20 @@ impl Env {
             vm.push(Vm::create_meta(&self.serv_belong_to, cfg)?);
         }
 
-        // 同时要检查实际的最终文件是否存在,
-        // 防止软链接存在, 而实际文件不存的情况
-        let images = {
-            let mut res = vct![];
-            for i in vm.iter() {
-                res.push(i.image_path.canonicalize().c(d!())?);
-            }
-            res
-        };
-
         // 检查实际的镜像文件是否已生成,
+        // canonicalize() 会确保路径中涉及的所有环节均实际存在,
         // 若出错返回, 相关资源会被`Drop`自动清理
         let mut cnter = 0;
-        while vm
+        let path_set = vm.iter().map(|i| vmimg_path(i)).collect::<Vec<_>>();
+        while path_set
             .iter()
-            .map(|i| i.image_path.as_path())
-            .chain(images.iter().map(|i| i.as_path()))
-            .any(|i| !i.exists())
+            .map(|i| i.canonicalize())
+            .any(|i| i.is_err())
         {
             // 最多等待五秒钟
             if 25 < cnter {
                 return Err(
-                    eg!(@vm.iter().filter(|vm| !vm.image_path.exists()).collect::<Vec<_>>()),
+                    eg!(@path_set.into_iter().filter(|i| i.canonicalize().is_err()).collect::<Vec<_>>()),
                 );
             }
 
@@ -970,13 +958,4 @@ impl Drop for Vm {
 
         vm::post_clean(self);
     }
-}
-
-// 命名格式为: ${CLONE_MARK}_VmId
-#[inline(always)]
-fn vmimg_path(vm: &Vm) -> PathBuf {
-    let mut vmimg_path = vm.image_path.clone();
-    let vmimg_name = format!("{}{}", CLONE_MARK, vm.id);
-    vmimg_path.set_file_name(vmimg_name);
-    vmimg_path
 }

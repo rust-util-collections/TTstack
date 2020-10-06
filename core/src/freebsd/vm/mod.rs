@@ -6,11 +6,7 @@
 //! - ...
 //!
 
-use crate::{
-    asleep,
-    freebsd::{CLONE_MARK, ZFS_ROOT},
-    Vm, VmId, POOL,
-};
+use crate::{asleep, Vm, VmId, CLONE_MARK, POOL, ZFS_ROOT};
 use myutil::err::*;
 use myutil::*;
 use nix::unistd::{daemon, execv, fork, ForkResult};
