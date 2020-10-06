@@ -2,7 +2,9 @@
 //! # 基本类型定义
 //!
 
-use crate::{nat, pause, resume, vm, vmimg_path};
+#[cfg(not(feature = "testmock"))]
+use crate::vmimg_path;
+use crate::{nat, pause, resume, vm};
 use lazy_static::lazy_static;
 use myutil::{err::*, *};
 use parking_lot::{Mutex, RwLock};
@@ -11,8 +13,9 @@ use std::{
     path::PathBuf,
     sync::atomic::{AtomicI32, AtomicU16, Ordering},
     sync::{Arc, Weak},
-    thread, time,
 };
+#[cfg(not(feature = "testmock"))]
+use std::{thread, time};
 pub(crate) use ttcore_def::*;
 
 // VM 实例的生命周期最长 6 小时
@@ -550,11 +553,30 @@ impl Env {
             vm.push(Vm::create_meta(&self.serv_belong_to, cfg)?);
         }
 
-        // 检查实际的镜像文件是否已生成,
-        // canonicalize() 会确保路径中涉及的所有环节均实际存在,
         // 若出错返回, 相关资源会被`Drop`自动清理
+        Self::check_image(&vm).c(d!())?;
+
+        // 准备工作成功完成后, 启动所有的 VM 进程;
+        // 若出错返回, VM 进程及相关资源会被`Drop`自动清理
+        for vm in vm.iter() {
+            vm.start_vm().c(d!())?;
+        }
+
+        // 全部创建成功后再批量注册
+        vm.into_iter().for_each(|vm| {
+            self.vm.insert(vm.id(), vm);
+        });
+
+        Ok(())
+    }
+
+    // 检查实际的镜像文件是否已生成,
+    // canonicalize() 会确保路径中涉及的所有环节均实际存在,
+    #[cfg(not(feature = "testmock"))]
+    fn check_image(vm: &[Vm]) -> Result<()> {
         let mut cnter = 0;
         let path_set = vm.iter().map(|i| vmimg_path(i)).collect::<Vec<_>>();
+
         while path_set
             .iter()
             .map(|i| i.canonicalize())
@@ -571,17 +593,11 @@ impl Env {
             thread::sleep(time::Duration::from_millis(200));
         }
 
-        // 准备工作成功完成后, 启动所有的 VM 进程;
-        // 若出错返回, VM 进程及相关资源会被`Drop`自动清理
-        for vm in vm.iter() {
-            vm.start_vm().c(d!())?;
-        }
+        Ok(())
+    }
 
-        // 全部创建成功后再批量注册
-        vm.into_iter().for_each(|vm| {
-            self.vm.insert(vm.id(), vm);
-        });
-
+    #[cfg(feature = "testmock")]
+    fn check_image(_vm: &[Vm]) -> Result<()> {
         Ok(())
     }
 

@@ -24,6 +24,7 @@ mod linux;
 #[cfg(not(feature = "testmock"))]
 pub use linux::*;
 
+#[cfg(not(feature = "testmock"))]
 mod common {
     use crate::Vm;
     use futures::executor::{ThreadPool, ThreadPoolBuilder};
@@ -38,7 +39,6 @@ mod common {
             pnk!(ThreadPoolBuilder::new().pool_size(1).create());
     }
 
-    #[cfg(not(feature = "testmock"))]
     pub(crate) async fn asleep(sec: u64) {
         futures_timer::Delay::new(std::time::Duration::from_secs(sec)).await;
     }
@@ -78,6 +78,7 @@ mod common {
     }
 }
 
+#[cfg(not(feature = "testmock"))]
 pub(crate) use common::*;
 
 mod test;

@@ -191,17 +191,13 @@ mod vmcfg {
     }
 
     impl Disk {
-        fn new(vm: &Vm) -> Result<Self> {
-            Ok(Disk {
+        fn new(vm: &Vm) -> Self {
+            Disk {
                 drive_id: format!("rootfs.{}", vm.id),
-                path_on_host: vmimg_path(vm)
-                    .canonicalize()
-                    .c(d!())?
-                    .to_string_lossy()
-                    .into_owned(),
+                path_on_host: vmimg_path(vm).to_string_lossy().into_owned(),
                 is_root_device: true,
                 is_read_only: false,
-            })
+            }
         }
     }
 
@@ -235,7 +231,7 @@ mod vmcfg {
     pub(super) fn gen(vm: &Vm) -> Result<String> {
         let machine_config = MachineConfig::new(vm.cpu_num, vm.mem_size);
         let boot_source = BootSource::new(vm).c(d!())?;
-        let disks = vct![Disk::new(vm).c(d!())?];
+        let disks = vct![Disk::new(vm)];
         let network_interfaces = vct![NetworkInterface::new(vm)];
 
         serde_json::to_string(&Cfg {
