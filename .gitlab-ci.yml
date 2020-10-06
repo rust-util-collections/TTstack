@@ -16,8 +16,8 @@ job_test:
   stage: test
   script:
     - make test
-    - kcov target/cov target/debug/tt*
-    - COVERAGE=$(grep -Eo 'covered":.*?[^\\]"' target/cov/index.json | grep -o "[0-9]*\.[0-9]")
+    - cargo kcov --all --lib
+    - COVERAGE=$(grep -Po '(?<="covered":")\d+(?:\.\d+)?(?=")' target/cov/index.js)
     # Tips: use '^Coverage:\s+(\d+(?:\.\d+)?)' on gitlab to capture the result
     - echo "Coverage:" ${COVERAGE}
   tags:
