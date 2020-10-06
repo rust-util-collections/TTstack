@@ -137,7 +137,9 @@ fn serv_it(
     peeraddr: SocketAddr,
 ) -> Result<()> {
     if let Some(ops) = hdr::OPS_MAP.get(ops_id) {
-        ops(ops_id, peeraddr, request).c(d!())
+        ops(ops_id, peeraddr, request)
+            .c(d!())
+            .or_else(|e| send_err!(DEFAULT_REQ_ID, e, peeraddr))
     } else {
         send_err!(DEFAULT_REQ_ID, eg!("Invalid operation-id !"), peeraddr)
     }
