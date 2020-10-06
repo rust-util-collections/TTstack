@@ -5,6 +5,8 @@
 //!
 //! Use Bhyve + IPFW + ZFS on FreeBSD.
 //!
+//! **NOTE**: TT on freebsd is experimental, do **NOT** use it in production.
+//!
 
 pub(crate) mod nat;
 pub(crate) mod vm;

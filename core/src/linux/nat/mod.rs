@@ -114,6 +114,11 @@ pub(crate) mod real {
             delete table {proto} {table};
             add table {proto} {table};
 
+            add set {proto} {table} BLACK_LIST {{ type ipv4_addr; }};
+            add chain {proto} {table} FWD_CHAIN {{ type filter hook forward priority 0; policy accept; }};
+            add rule {proto} {table} FWD_CHAIN ct state established,related accept;
+            add rule {proto} {table} FWD_CHAIN {proto} saddr @BLACK_LIST drop;
+
             add map {proto} {table} PORT_TO_PORT {{ type inet_service: inet_service; }};
             add map {proto} {table} PORT_TO_IPV4 {{ type inet_service: ipv4_addr; }};
             add chain {proto} {table} DNAT_CHAIN {{ type nat hook prerouting priority -100; }};
@@ -121,11 +126,6 @@ pub(crate) mod real {
             add rule {proto} {table} DNAT_CHAIN dnat tcp dport map @PORT_TO_IPV4: tcp dport map @PORT_TO_PORT;
             add rule {proto} {table} DNAT_CHAIN dnat udp dport map @PORT_TO_IPV4: udp dport map @PORT_TO_PORT;
             add rule {proto} {table} SNAT_CHAIN ip saddr 10.0.0.0/8 ip daddr != 10.0.0.0/8 snat to {pubip};
-
-            add set {proto} {table} BLACK_LIST {{ type ipv4_addr; }};
-            add chain {proto} {table} FILTER_CHAIN {{ type filter hook output priority 0; policy accept; }};
-            add rule {proto} {table} FILTER_CHAIN ct state established,related accept;
-            add rule {proto} {table} FILTER_CHAIN {proto} saddr @BLACK_LIST drop;
             ",
             proto=TABLE_PROTO,
             table=TABLE_NAME,
