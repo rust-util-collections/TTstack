@@ -7,7 +7,8 @@ use crate::linux::{CLONE_MARK, ZFS_ROOT};
 #[cfg(any(feature = "zfs", feature = "nft"))]
 use crate::{asleep, POOL};
 use crate::{
-    linux::vm::{cmd_exec, engine::vmimg_path, util::wait_pid},
+    vmimg_path,
+    linux::vm::{cmd_exec, util::wait_pid},
     Vm,
 };
 use lazy_static::lazy_static;

@@ -20,6 +20,9 @@ const MAX_LIFE_TIME: u64 = 6 * 3600;
 // `tt env start/stop ...` 最小间隔 20 秒
 const MIN_START_STOP_ITV: u64 = 20;
 
+#[cfg(not(feature = "test_mock"))]
+const CLONE_MARK: &str = "clone_";
+
 /// eg: "QEMU:CentOS-7.2:default"
 pub type OsName = String;
 /// eg: "/dev/zvol/zroot/tt/QEMU:CentOS-7.2:default"
@@ -967,4 +970,13 @@ impl Drop for Vm {
 
         vm::post_clean(self);
     }
+}
+
+// 命名格式为: ${CLONE_MARK}_VmId
+#[inline(always)]
+fn vmimg_path(vm: &Vm) -> PathBuf {
+    let mut vmimg_path = vm.image_path.clone();
+    let vmimg_name = format!("{}{}", CLONE_MARK, vm.id);
+    vmimg_path.set_file_name(vmimg_name);
+    vmimg_path
 }

@@ -52,12 +52,3 @@ pub(super) fn remove_tap(vm: &Vm) -> Result<()> {
         _ => Err(eg!("The fucking world is over!")),
     }
 }
-
-// 命名格式为: ${CLONE_MARK}_VmId
-#[inline(always)]
-fn vmimg_path(vm: &Vm) -> PathBuf {
-    let mut vmimg_path = vm.image_path.clone();
-    let vmimg_name = format!("{}{}", CLONE_MARK, vm.id);
-    vmimg_path.set_file_name(vmimg_name);
-    vmimg_path
-}

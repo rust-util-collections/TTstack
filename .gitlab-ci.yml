@@ -1,12 +1,34 @@
-image: dev:v0.3
-
 stages:
   - build
+  - test
+  - deploy
 
-job_stable_latest:
+job_build:
+  image: ubuntu-dev:v0.1
   stage: build
   script:
     - make lint
+  tags:
+    - rust
+
+job_test:
+  image: ubuntu-dev:v0.1
+  stage: test
+  script:
     - make test
+    - kcov target/cov target/debug/tt*
+    - COVERAGE=$(grep -Eo 'covered":.*?[^\\]"' target/cov/index.json | grep -o "[0-9]*\.[0-9]")
+    # Tips: use '^Coverage:\s+(\d+(?:\.\d+)?)' on gitlab to capture the result
+    - echo "Coverage:" ${COVERAGE}
+  tags:
+    - rust
+
+job_deploy:
+  image: alpine-dev:v0.4
+  stage: deploy
+  script:
+    - make lint
+    - make install
+    - scp /usr/local/bin/tt* root@192.168.3.22:/data/ftp_home/tt_releases/linux/
   tags:
     - rust

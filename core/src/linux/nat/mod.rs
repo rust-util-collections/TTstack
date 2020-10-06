@@ -101,8 +101,8 @@ pub(crate) mod real {
     const TABLE_NAME: &str = "tt-core";
 
     lazy_static! {
-        static ref RULE_SET: Arc<Mutex<String>> =
-            Arc::new(Mutex::new(String::new()));
+        // Do NOT use `push_str`: any rule failed will cause all failed
+        static ref RULE_SET: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vct![]));
     }
 
     // nft 初始化
@@ -160,7 +160,7 @@ pub(crate) mod real {
             ptop = port_to_port.join(","),
         );
 
-        RULE_SET.lock().push_str(&arg);
+        RULE_SET.lock().push(arg);
 
         Ok(())
     }
@@ -190,7 +190,7 @@ pub(crate) mod real {
                 .join(","),
         );
 
-        RULE_SET.lock().push_str(&arg);
+        RULE_SET.lock().push(arg);
 
         // 解锁已释放的 VM 地址
         info_omit!(allow_outgoing(vm_set));
@@ -215,7 +215,7 @@ pub(crate) mod real {
             ip_set = ip_set.join(","),
         );
 
-        RULE_SET.lock().push_str(&arg);
+        RULE_SET.lock().push(arg);
 
         Ok(())
     }
@@ -237,7 +237,7 @@ pub(crate) mod real {
             ip_set = ip_set.join(","),
         );
 
-        RULE_SET.lock().push_str(&arg);
+        RULE_SET.lock().push(arg);
 
         Ok(())
     }
@@ -259,12 +259,14 @@ pub(crate) mod real {
         POOL.spawn_ok(async {
             loop {
                 asleep(6).await;
-                let arg = mem::take(&mut *RULE_SET.lock());
+                let args = mem::take(&mut *RULE_SET.lock());
 
-                if !arg.is_empty() {
+                if !args.is_empty() {
                     POOL.spawn_ok(async move {
                         asleep(3).await;
-                        info_omit!(nft_exec(&arg));
+                        args.iter().for_each(|arg| {
+                            info_omit!(nft_exec(dbg!(&arg)));
+                        })
                     });
                 }
             }

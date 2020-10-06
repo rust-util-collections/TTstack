@@ -9,7 +9,7 @@
 pub(crate) mod nat;
 pub(crate) mod vm;
 
-use crate::{ImagePath, OsName, Vm, VmId, VmKind};
+use crate::{CLONE_MARK, ImagePath, OsName, Vm, VmId, VmKind};
 #[cfg(feature = "zfs")]
 use lazy_static::lazy_static;
 use myutil::{err::*, *};
@@ -19,9 +19,6 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-
-#[cfg(not(feature = "test_mock"))]
-const CLONE_MARK: &str = "clone_";
 
 #[cfg(feature = "zfs")]
 lazy_static! {

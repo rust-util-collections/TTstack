@@ -9,7 +9,7 @@
 pub(crate) mod nat;
 pub(crate) mod vm;
 
-use crate::{ImagePath, OsName, Vm, VmId, VmKind};
+use crate::{CLONE_MARK, ImagePath, OsName, Vm, VmId, VmKind};
 use lazy_static::lazy_static;
 use myutil::{err::*, *};
 use std::collections::HashMap;
@@ -17,8 +17,6 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-
-const CLONE_MARK: &str = "clone_";
 
 lazy_static! {
     static ref ZFS_ROOT: &'static str = pnk!(imgroot_register(None));
