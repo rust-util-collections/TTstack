@@ -1,5 +1,8 @@
 # tt
 
+[![pipeline status](http://192.168.3.189/fanhui/tt/badges/master/pipeline.svg)](http://192.168.3.189/fanhui/tt/-/commits/master)
+[![coverage report](http://192.168.3.189/fanhui/tt/badges/master/coverage.svg)](http://192.168.3.189/fanhui/tt/-/commits/master)
+
 tt, Temporary Test.
 
 面向中小型企业的轻量级私有云平台, 可快速生成各种虚拟机环境, 为产品兼容性验证和自动化测试提供高效的基础环境.
