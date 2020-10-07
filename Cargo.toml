@@ -1,12 +1,12 @@
 [workspace]
 members = [
-    "core_def",
-    "core",
-    "server_def",
-    "server",
-    "proxy",
-    "client",
-    "rexec",
+    "src/core_def",
+    "src/core",
+    "src/server_def",
+    "src/server",
+    "src/proxy",
+    "src/client",
+    "src/rexec",
 ]
 
 [profile.dev]

@@ -28,64 +28,66 @@ pack: release
 	tar -C $(BUILD_DIR) -zcf $(PACK_NAME).tar.gz $(PACK_NAME)
 
 install:
-	$(CARGO) install -f --bins --path ./rexec --root=/usr/local/
-	$(CARGO) install -f --bins --path ./client --root=/usr/local/
-	$(CARGO) install -f --bins --path ./server --root=/usr/local/ # will fail on MacOS
-	$(CARGO) install -f --bins --path ./proxy --root=/usr/local/  # will fail on MacOS
+	$(CARGO) install -f --bins --path src/rexec --root=/usr/local/
+	$(CARGO) install -f --bins --path src/client --root=/usr/local/
+	$(CARGO) install -f --bins --path src/server --root=/usr/local/ # will fail on MacOS
+	$(CARGO) install -f --bins --path src/proxy --root=/usr/local/  # will fail on MacOS
 
 lint: githook
 	$(CARGO) clippy
-	cd core && $(CARGO) clippy --features="testmock"
-	cd core && $(CARGO) clippy --no-default-features
-	cd core && $(CARGO) clippy --no-default-features --features="zfs"
-	cd core && $(CARGO) clippy --no-default-features --features="cow"
-	cd core && $(CARGO) clippy --no-default-features --features="nft"
-	cd core && $(CARGO) clippy --no-default-features --features="cow nft"
-	cd server && $(CARGO) clippy --features="testmock"
-	cd server && $(CARGO) clippy --no-default-features
-	cd server && $(CARGO) clippy --no-default-features --features="zfs"
-	cd server && $(CARGO) clippy --no-default-features --features="cow"
-	cd server && $(CARGO) clippy --no-default-features --features="nft"
-	cd server && $(CARGO) clippy --no-default-features --features="cow nft"
-	cd proxy && $(CARGO) clippy --features="testmock"
+	cd src/core && $(CARGO) clippy --features="testmock"
+	cd src/core && $(CARGO) clippy --no-default-features
+	cd src/core && $(CARGO) clippy --no-default-features --features="zfs"
+	cd src/core && $(CARGO) clippy --no-default-features --features="cow"
+	cd src/core && $(CARGO) clippy --no-default-features --features="nft"
+	cd src/core && $(CARGO) clippy --no-default-features --features="cow nft"
+	cd src/server && $(CARGO) clippy --features="testmock"
+	cd src/server && $(CARGO) clippy --no-default-features
+	cd src/server && $(CARGO) clippy --no-default-features --features="zfs"
+	cd src/server && $(CARGO) clippy --no-default-features --features="cow"
+	cd src/server && $(CARGO) clippy --no-default-features --features="nft"
+	cd src/server && $(CARGO) clippy --no-default-features --features="cow nft"
+	cd src/proxy && $(CARGO) clippy --features="testmock"
 
-test: stop
+test: test_debug test_release
+
+test_debug: stop
 	$(CARGO) test -- --test-threads=1 --nocapture
 	-@ pkill -9 integration
-	cd server && $(CARGO) test --features="testmock" -- --test-threads=1 --nocapture
+	cd src/server && $(CARGO) test --features="testmock" -- --test-threads=1 --nocapture
 	-@ pkill -9 integration
-	cd server && $(CARGO) test --features="testmock, cow" -- --test-threads=1 --nocapture
+	cd src/server && $(CARGO) test --features="testmock, cow" -- --test-threads=1 --nocapture
 	-@ pkill -9 integration
-	cd server && $(CARGO) test --no-default-features --features="testmock" -- --test-threads=1 --nocapture
+	cd src/server && $(CARGO) test --no-default-features --features="testmock" -- --test-threads=1 --nocapture
 	-@ pkill -9 integration
-	cd server && $(CARGO) test --no-default-features --features="testmock, cow" -- --test-threads=1 --nocapture
+	cd src/server && $(CARGO) test --no-default-features --features="testmock, cow" -- --test-threads=1 --nocapture
 	-@ pkill -9 integration
-	cd proxy && $(CARGO) test --features="testmock" -- --test-threads=1 --nocapture
+	cd src/proxy && $(CARGO) test --features="testmock" -- --test-threads=1 --nocapture
 	-@ pkill -9 integration
 
 test_release: stop
 	$(CARGO) test --release -- --test-threads=1 --nocapture
 	-@ pkill -9 integration
-	cd server && $(CARGO) test --release --features="testmock" -- --test-threads=1 --nocapture
+	cd src/server && $(CARGO) test --release --features="testmock" -- --test-threads=1 --nocapture
 	-@ pkill -9 integration
-	cd server && $(CARGO) test --release --features="testmock, cow" -- --test-threads=1 --nocapture
+	cd src/server && $(CARGO) test --release --features="testmock, cow" -- --test-threads=1 --nocapture
 	-@ pkill -9 integration
-	cd server && $(CARGO) test --release --no-default-features --features="testmock" -- --test-threads=1 --nocapture
+	cd src/server && $(CARGO) test --release --no-default-features --features="testmock" -- --test-threads=1 --nocapture
 	-@ pkill -9 integration
-	cd server && $(CARGO) test --release --no-default-features --features="testmock, cow" -- --test-threads=1 --nocapture
+	cd src/server && $(CARGO) test --release --no-default-features --features="testmock, cow" -- --test-threads=1 --nocapture
 	-@ pkill -9 integration
-	cd proxy && $(CARGO) test --release --features="testmock" -- --test-threads=1 --nocapture
+	cd src/proxy && $(CARGO) test --release --features="testmock" -- --test-threads=1 --nocapture
 	-@ pkill -9 integration
 
 fmt:
 	@ ./tools/fmt.sh
 
 doc:
-	$(CARGO) doc --open -p tt
-	$(CARGO) doc --open -p ttproxy
-	$(CARGO) doc --open -p ttserver
-	$(CARGO) doc --open -p ttcore
-	$(CARGO) doc --open -p ttrexec
+	$(CARGO) doc --open -p src/tt
+	$(CARGO) doc --open -p src/ttproxy
+	$(CARGO) doc --open -p src/ttserver
+	$(CARGO) doc --open -p src/ttcore
+	$(CARGO) doc --open -p src/ttrexec
 
 githook:
 	@mkdir -p ./.git/hooks # play with online gitlab-ci
