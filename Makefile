@@ -1,13 +1,31 @@
-PWD = $(shell pwd)
-CARGO = ~/.cargo/bin/cargo
 
-all: lint
+CARGO = ~/.cargo/bin/cargo
+BUILD_DIR = /tmp/.__tt_build_dir__
+PACK_NAME = tt
+PACK_DIR = $(BUILD_DIR)/$(PACK_NAME)
+TARGET = $(shell rustup toolchain list | grep default | sed 's/^[^-]\+-//' | sed 's/ \+(default).*//')
+
+all: pack
 
 build:
 	$(CARGO) build --bins
 
 release:
 	$(CARGO) build --bins --release
+
+pack: release
+	-@ rm -rf $(PACK_DIR)
+	mkdir -p $(PACK_DIR)
+	cd target/release && cp tt ttserver ttproxy $(PACK_DIR)/
+	cp tools/install.sh $(PACK_DIR)/
+	\
+	git submodule update --init --recursive
+	cd tools/firecracker \
+		&& cargo build --release --target-dir=$(BUILD_DIR) \
+		&& cp $(BUILD_DIR)/$(TARGET)/release/firecracker $(PACK_DIR)/
+	\
+	chmod -R +x $(PACK_DIR)
+	tar -C $(BUILD_DIR) -zcf $(PACK_NAME).tar.gz $(PACK_NAME)
 
 install:
 	$(CARGO) install -f --bins --path ./rexec --root=/usr/local/
@@ -30,9 +48,6 @@ lint: githook
 	cd server && $(CARGO) clippy --no-default-features --features="nft"
 	cd server && $(CARGO) clippy --no-default-features --features="cow nft"
 	cd proxy && $(CARGO) clippy --features="testmock"
-
-stop:
-	- pkill -9 ttserver
 
 test: stop
 	$(CARGO) test -- --test-threads=1 --nocapture
@@ -62,15 +77,8 @@ test_release: stop
 	cd proxy && $(CARGO) test --release --features="testmock" -- --test-threads=1 --nocapture
 	-@ pkill -9 integration
 
-clean:
-	@ $(CARGO) clean
-	@ find . -type f -name "Cargo.lock" | xargs rm -f
-
-cleanall: clean
-	@ find . -type d -name "target" | xargs rm -rf
-
 fmt:
-	@ ./__tools/fmt.sh
+	@ ./tools/fmt.sh
 
 doc:
 	$(CARGO) doc --open -p tt
@@ -81,4 +89,17 @@ doc:
 
 githook:
 	@mkdir -p ./.git/hooks # play with online gitlab-ci
-	@cp ./__tools/pre-commit ./.git/hooks/
+	@cp ./tools/pre-commit ./.git/hooks/
+
+stop:
+	-@ pkill -9 ttproxy
+	-@ pkill -9 ttserver
+	-@ pkill -9 ttrexec-daemon
+
+clean:
+	@ git clean -fdx
+	@ $(CARGO) clean
+	@ find . -type f -name "Cargo.lock" | xargs rm -f
+
+cleanall: clean
+	@ find . -type d -name "target" | xargs rm -rf
