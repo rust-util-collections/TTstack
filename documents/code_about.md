@@ -31,41 +31,38 @@ $ (git)-[master]-% find . -type f \
     | xargs wc -l \
     | grep -Ev '^ +[0-9]{1,2} '
 
-   367 ./src/server/src/hdr/mod.rs
-   103 ./src/server/tests/env/mod.rs
-   164 ./src/server/tests/standalone/mod.rs
-   242 ./src/server/tests/knead/mod.rs
-   184 ./src/server_def/src/lib.rs
+   107 ./Makefile
+   160 ./README.md
+   389 ./documents/user_guide.md
+   169 ./src/rexec/tests/integration.rs
+   117 ./src/rexec/src/bin/cli.rs
    149 ./src/rexec/src/client.rs
    272 ./src/rexec/src/server.rs
    164 ./src/rexec/src/common.rs
-   117 ./src/rexec/src/bin/cli.rs
-   169 ./src/rexec/tests/integration.rs
-   553 ./src/client/src/cmd_line.rs
-   157 ./src/client/src/ops/env/update.rs
-   118 ./src/client/src/ops/env/run/ssh.rs
-   253 ./src/client/src/ops/env/run/mod.rs
-   137 ./src/client/src/ops/mod.rs
-   147 ./src/client/src/cfg_file.rs
-   164 ./src/core_def/src/lib.rs
    977 ./src/core/src/def.rs
-   113 ./src/core/src/freebsd/nat/mod.rs
-   175 ./src/core/src/freebsd/vm/mod.rs
-   137 ./src/core/src/freebsd/mod.rs
    275 ./src/core/src/linux/nat/mod.rs
+   205 ./src/core/src/linux/mod.rs
    150 ./src/core/src/linux/vm/cgroup.rs
    372 ./src/core/src/linux/vm/engine/qemu.rs
    245 ./src/core/src/linux/vm/engine/firecracker/suitable_env.rs
-   205 ./src/core/src/linux/mod.rs
+   283 ./src/proxy/tests/knead/mod.rs
+   180 ./src/proxy/tests/standalone/mod.rs
+   146 ./src/proxy/tests/env/mod.rs
+   101 ./src/proxy/src/def.rs
    175 ./src/proxy/src/hdr/add_env.rs
    418 ./src/proxy/src/hdr/mod.rs
-   101 ./src/proxy/src/def.rs
    183 ./src/proxy/src/lib.rs
-   146 ./src/proxy/tests/env/mod.rs
-   180 ./src/proxy/tests/standalone/mod.rs
-   283 ./src/proxy/tests/knead/mod.rs
-   389 ./documents/user_guide.md
-   162 ./README.md
-   107 ./Makefile
- 11597 total
+   164 ./src/core_def/src/lib.rs
+   242 ./src/server/tests/knead/mod.rs
+   164 ./src/server/tests/standalone/mod.rs
+   103 ./src/server/tests/env/mod.rs
+   367 ./src/server/src/hdr/mod.rs
+   184 ./src/server_def/src/lib.rs
+   553 ./src/client/src/cmd_line.rs
+   157 ./src/client/src/ops/env/update.rs
+   253 ./src/client/src/ops/env/run/mod.rs
+   118 ./src/client/src/ops/env/run/ssh.rs
+   137 ./src/client/src/ops/mod.rs
+   147 ./src/client/src/cfg_file.rs
+ 11074 total
 ```

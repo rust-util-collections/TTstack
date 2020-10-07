@@ -37,7 +37,7 @@ sequenceDiagram
 
 ### Core 内部实现
 
-#### Linux
+#### On Linux
 
 ```mermaid
 sequenceDiagram
@@ -51,22 +51,6 @@ sequenceDiagram
     C->>K: 创建 PID NS 与 CGROUP
     C->>Q: 增量(COW)创建运行时镜像
     C->>N: 使用 Nftables 的哈希表结构管理 NAT 规则
-```
-
-#### FreeBSD
-
-```mermaid
-sequenceDiagram
-    autonumber
-
-    participant C as Core
-    participant Z as ZFS
-    participant B as Bhyve
-    participant I as IPFW
-
-    C->>Z: ZFS clone/snapshot 创建镜像
-    C->>B: 创建轻量级的 VM 实例
-    C->>I: 使用 IPFW 的 LOOKUP TABLE 配置 NAT 规则
 ```
 
 ## Why NOT

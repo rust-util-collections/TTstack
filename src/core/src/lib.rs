@@ -1,26 +1,15 @@
 //!
 //! # TT 核心实现
 //!
-//! VM will run faster on FreeBSD,
-//! especially in IO-about operations.
-//!
 
+#![cfg(target_os = "linux")]
 #![warn(missing_docs, unused_import_braces, unused_extern_crates)]
 
 mod def;
 pub use def::*;
 
-#[cfg(target_os = "freebsd")]
-#[cfg(not(feature = "testmock"))]
-mod freebsd;
-#[cfg(target_os = "freebsd")]
-#[cfg(not(feature = "testmock"))]
-pub use freebsd::*;
-
-#[cfg(target_os = "linux")]
 #[cfg(not(feature = "testmock"))]
 mod linux;
-#[cfg(target_os = "linux")]
 #[cfg(not(feature = "testmock"))]
 pub use linux::*;
 

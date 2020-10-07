@@ -3,7 +3,7 @@
 //!
 //! core 模块实现服务端的核心逻辑.
 //!
-//! use Qemu/KVM + Nftables on Linux.
+//! use Qemu\FireCracker + Nftables on Linux.
 //!
 
 pub(crate) mod nat;

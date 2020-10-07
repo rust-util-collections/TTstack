@@ -16,7 +16,7 @@ Guide for system admin.
 - [ FireCracker ] `firecracker` 二进制文件要使用 `musl-libc` 编译
     - 由于 `Rust` 动态链接 `glibc` , 故运行时存在更多的不确定性因素, 参见: [issue #2044](https://github.com/firecracker-microvm/firecracker/issues/2044)
 
-#### Linux
+#### On Linux
 
 > 使用 Qemu\FireCracker 做为 VM 引擎, 使用 Nftables 做 NAT 端口转发.
 >
@@ -31,25 +31,6 @@ Guide for system admin.
 - `qemu`
 - `nftables`
 - `ZOL: zfs on linux`
-
-#### FreeBSD (experimental !!!)
-
-> 使用 Bhyve 做为 VM 引擎, 使用 IPFW 内核级 NAT 做端口转发.
->
-> - `bhyve` 程序路径必须是 `/usr/sbin/bhyve`
-
-环境配置:
-
-- `sysrc zfs_enable=YES`
-- `sysrc gateway_enable=YES`
-- `sysrc firewall_enable=YES`
-- `sysrc firewall_nat_enable=YES`
-- `echo "net.link.tap.up_on_open=1" >> /etc/sysctl.conf`
-- `kldload ipfw ipfw_nat if_bridge if_tap`
-
-组件安装
-
-- `sysutils/bhyve-firmware`
 
 ## ttserver 配置
 

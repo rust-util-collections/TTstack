@@ -115,13 +115,11 @@ tt env del TEST
 ## 技术特性
 
 - 整洁高效的资源管理
-    - (Linux) 每个 VM 存在于独立的 Cgroup 中, 资源清理准确无误
-    - (Linux) [可选] 使用 FireCracker 快速创建大量的轻量级 MicroVM
-    - (Linux) [可选] 使用 zfs 的 `snapshot\clone` 机制使 VM 获得原生 IO 性能
-    - (Linux) [可选] 使用 nftables 的 `SET\MAP` 等高级数据结构管理网络端口
-    - (Linux) 服务进程运行在单独的 `PID NS` 中, 服务退出会自动销毁所有资源
-    - (FreeBSD) 使用 zfs 的 `snapshot\clone` 机制使 VM 获得原生 IO 性能
-    - (FreeBSD) 使用简洁高效的 Bhyve 管理 VM 实例
+    - 每个 VM 存在于独立的 Cgroup 中, 资源清理准确无误
+    - [可选] 使用 FireCracker 快速创建大量的轻量级 MicroVM
+    - [默认] 使用 zfs 的 `snapshot\clone` 机制使 VM 获得原生 IO 性能
+    - [默认] 使用 nftables 的 `SET\MAP` 等高级数据结构管理网络端口
+    - 服务进程运行在单独的 `PID NS` 中, 服务退出会自动销毁所有资源
     - 通过 `Rust Drop` 机制自动管理 VM 生命周期
     - ...
 - 分布式可扩展架构
