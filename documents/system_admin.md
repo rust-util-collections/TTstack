@@ -32,9 +32,9 @@ Guide for system admin.
 - `nftables`
 - `ZOL: zfs on linux`
 
-#### FreeBSD
+#### FreeBSD (experimental !!!)
 
-> 使用 Bhyve 做为 VM 引擎, 使用 IPFW 内核极 NAT 做端口转发.
+> 使用 Bhyve 做为 VM 引擎, 使用 IPFW 内核级 NAT 做端口转发.
 >
 > - `bhyve` 程序路径必须是 `/usr/sbin/bhyve`
 
