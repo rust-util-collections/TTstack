@@ -83,11 +83,11 @@ fmt:
 	@ ./tools/fmt.sh
 
 doc:
-	$(CARGO) doc --open -p src/tt
-	$(CARGO) doc --open -p src/ttproxy
-	$(CARGO) doc --open -p src/ttserver
-	$(CARGO) doc --open -p src/ttcore
-	$(CARGO) doc --open -p src/ttrexec
+	$(CARGO) doc --open -p tt
+	$(CARGO) doc --open -p ttrexec
+	$(CARGO) doc --open -p ttproxy
+	$(CARGO) doc --open -p ttserver # will fail on MacOS
+	$(CARGO) doc --open -p ttcore   # will fail on MacOS
 
 githook:
 	@mkdir -p ./.git/hooks # play with online gitlab-ci
