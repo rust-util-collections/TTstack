@@ -577,20 +577,25 @@ impl Env {
         let mut cnter = 0;
         let path_set = vm.iter().map(|i| vmimg_path(i)).collect::<Vec<_>>();
 
+        // 每个`zfs clone`预期耗时100ms, 最少2s
+        let mut timeout = (path_set.len() * 100) as u64;
+        alt!(2000 > timeout, timeout = 2000);
+        let timeout_unit = 200;
+        let nr_limit = timeout / timeout_unit;
+
         while path_set
             .iter()
             .map(|i| i.canonicalize())
             .any(|i| i.is_err())
         {
-            // 最多等待五秒钟
-            if 25 < cnter {
+            if nr_limit < cnter {
                 return Err(
                     eg!(@path_set.into_iter().filter(|i| i.canonicalize().is_err()).collect::<Vec<_>>()),
                 );
             }
 
             cnter += 1;
-            thread::sleep(time::Duration::from_millis(200));
+            thread::sleep(time::Duration::from_millis(timeout_unit));
         }
 
         Ok(())
