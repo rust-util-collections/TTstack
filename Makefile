@@ -104,4 +104,5 @@ clean:
 	@ find . -type f -name "Cargo.lock" | xargs rm -f
 
 cleanall: clean
+	@ rm -rf client core core_def server server_def proxy rexec
 	@ find . -type d -name "target" | xargs rm -rf
