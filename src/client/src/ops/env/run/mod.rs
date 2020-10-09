@@ -136,7 +136,7 @@ impl<'a> EnvRun<'a> {
             vci_set.into_iter().fold(vct![], |mut base, new| {
                 let cmd = format!(
                     r"
-                    printf 'tt_{}_{}_{}_{}_{}' | sed 's/:/_/g'  | sed 's/\./_/g' | sed 's/ /_/g' > /.hawk_id;
+                    printf 'tt_{}_{}_{}_{}_{}' | sed 's/:/-/g' | sed 's/ /-/g' | sed 's/\./_/g' > /.hawk_id;
                     (nohup pkill -9 'hawk-agent'; bash /usr/local/bin/hawk-agent/tool/start.sh; sleep 3; curl http://localhost:46000/plugin/update) &
                     ",
                     &new.env_id, datetime_local!(new.start_ts), &new.addr, &new.os, new.id
