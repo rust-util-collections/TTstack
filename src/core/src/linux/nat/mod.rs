@@ -101,8 +101,10 @@ pub(crate) mod real {
     const TABLE_NAME: &str = "tt-core";
 
     lazy_static! {
-        // Do NOT use `push_str`: any rule failed will cause all failed
-        static ref RULE_SET: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(vct![]));
+        static ref RULE_SET: Arc<Mutex<Vec<String>>> =
+            Arc::new(Mutex::new(vct![]));
+        static ref RULE_SET_ALLOW_FAIL: Arc<Mutex<Vec<String>>> =
+            Arc::new(Mutex::new(vct![]));
     }
 
     // nft 初始化
@@ -237,7 +239,7 @@ pub(crate) mod real {
             ip_set = ip_set.join(","),
         );
 
-        RULE_SET.lock().push(arg);
+        RULE_SET_ALLOW_FAIL.lock().push(arg);
 
         Ok(())
     }
@@ -245,7 +247,10 @@ pub(crate) mod real {
     // 执行 nft 命令
     #[inline(always)]
     fn nft_exec(arg: &str) -> Result<()> {
-        let res = process::Command::new("nft").arg(arg).output().c(d!())?;
+        let res = process::Command::new("sh")
+            .args(&["-c", arg])
+            .output()
+            .c(d!())?;
         if res.status.success() {
             Ok(())
         } else {
@@ -254,17 +259,20 @@ pub(crate) mod real {
     }
 
     // nft 并发设置规则会概率性失败,
-    // 以异步模式延时 3 秒应用收集到的所有规则
+    // 以异步模式延时 1 秒应用收集到的所有规则
     fn set_rule_cron() {
         POOL.spawn_ok(async {
             loop {
-                asleep(6).await;
+                asleep(2).await;
                 let args = mem::take(&mut *RULE_SET.lock());
+                let args_allow_fail =
+                    mem::take(&mut *RULE_SET_ALLOW_FAIL.lock());
 
                 if !args.is_empty() {
                     POOL.spawn_ok(async move {
-                        asleep(3).await;
-                        args.iter().for_each(|arg| {
+                        asleep(1).await;
+                        info_omit!(nft_exec(dbg!(&args.join(""))));
+                        args_allow_fail.iter().for_each(|arg| {
                             info_omit!(nft_exec(dbg!(&arg)));
                         })
                     });
