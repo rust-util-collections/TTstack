@@ -14,18 +14,7 @@ use std::process;
 
 fn main() {
     pnk!(cfg_file::cfg_init());
-    info_omit!(set_nofile());
     pnk!(cmd_line::parse_and_exec());
-}
-
-// avoie "too many files open"
-fn set_nofile() -> Result<()> {
-    let hard_limit = cmd_exec_with_output("ulimit", &["-H", "-n"])
-        .c(d!())?
-        .parse::<u64>()
-        .unwrap_or(10240)
-        .to_string();
-    cmd_exec("ulimit", &["-S", "-n", &hard_limit]).c(d!())
 }
 
 #[inline(always)]

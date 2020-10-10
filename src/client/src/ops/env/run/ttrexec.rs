@@ -2,7 +2,7 @@
 //! A fast implementation based on ttrexec.
 //!
 
-use super::VmConnInfo;
+use super::{ssh::USER, VmConnInfo};
 use myutil::{err::*, *};
 use std::{
     sync::mpsc::{channel, Receiver},
@@ -16,7 +16,7 @@ pub(crate) fn exec(
 ) -> Receiver<VmConnInfo> {
     let (s, r) = channel();
     vm_conn_info.into_iter().for_each(|mut vci| {
-        let cmd = remote_cmd.to_owned();
+        let cmd = format!("cd ~{};{}", USER, remote_cmd);
         let sender = s.clone();
         thread::spawn(move || {
             match req_exec(&format!("{}:{}", vci.addr, vci.ttrexec_port), &cmd)
