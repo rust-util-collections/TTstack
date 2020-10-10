@@ -247,8 +247,9 @@ pub(crate) mod real {
     // 执行 nft 命令
     #[inline(always)]
     fn nft_exec(arg: &str) -> Result<()> {
+        let arg = format!("nft '{}'", arg);
         let res = process::Command::new("sh")
-            .args(&["-c", arg])
+            .args(&["-c", &arg])
             .output()
             .c(d!())?;
         if res.status.success() {
