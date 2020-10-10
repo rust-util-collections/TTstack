@@ -195,7 +195,7 @@ pub(crate) mod real {
         RULE_SET.lock().push(arg);
 
         // 解锁已释放的 VM 地址
-        info_omit!(allow_outgoing(vm_set));
+        omit!(allow_outgoing(vm_set));
 
         Ok(())
     }
