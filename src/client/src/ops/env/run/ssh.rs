@@ -27,11 +27,7 @@ pub(super) fn exec(
     vm_conn_info.into_iter().for_each(|mut vci| {
         let conninfo = format!("{}@{}", USER, &vci.addr);
         let port = vci.ssh_port.to_string();
-
-        // make the `workdir` same as ttrexec
-        let mut cmd = "cd / && ".to_owned();
-        cmd.push_str(remote_cmd);
-
+        let cmd = remote_cmd.to_owned();
         let args = ["-p".to_owned(), port, conninfo, cmd].to_vec();
 
         let sender = s.clone();

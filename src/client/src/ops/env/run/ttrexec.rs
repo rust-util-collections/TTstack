@@ -16,6 +16,7 @@ pub(crate) fn exec(
 ) -> Receiver<VmConnInfo> {
     let (s, r) = channel();
     vm_conn_info.into_iter().for_each(|mut vci| {
+        // keep the same-workdir with SSH
         let cmd = format!("cd ~{};{}", USER, remote_cmd);
         let sender = s.clone();
         thread::spawn(move || {
