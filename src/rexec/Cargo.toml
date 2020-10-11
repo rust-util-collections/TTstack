@@ -1,9 +1,13 @@
 [package]
-edition = "2018"
 name = "ttrexec"
 version = "0.2.10"
-authors = ["fanhui <hui.fan@mail.ru>"]
-description = "Execute remote commands at a fairly fast speed."
+
+edition = "2018"
+authors = ["FanHui <fanhui.x@gmail.com>", "FanHui <hui.fan@mail.ru>"]
+description = "Lightweight private cloud solution for SME scenarios."
+license = "MIT OR Apache-2.0"
+keywords = ["openstack", "k8s", "kvm", "cloud"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 nix = "0.18"
