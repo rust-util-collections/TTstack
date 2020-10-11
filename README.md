@@ -1,7 +1,7 @@
 # tt
 
-[![pipeline status](http://192.168.3.189/fanhui/tt/badges/master/pipeline.svg)](http://192.168.3.189/fanhui/tt/-/commits/master)
-[![coverage report](http://192.168.3.189/fanhui/tt/badges/master/coverage.svg)](http://192.168.3.189/fanhui/tt/-/commits/master)
+[![pipeline status](https://gitlab.com/ktmlm/tt/badges/master/pipeline.svg)](https://gitlab.com/ktmlm/tt/-/commits/master)
+[![coverage report](https://gitlab.com/ktmlm/tt/badges/master/coverage.svg)](https://gitlab.com/ktmlm/tt/-/commits/master)
 
 tt, Temporary Test.
 
