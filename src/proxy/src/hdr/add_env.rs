@@ -16,6 +16,10 @@ pub(super) fn add_env(
     request: Vec<u8>,
 ) -> Result<()> {
     let mut req = serde_json::from_slice::<MyReq>(&request).c(d!())?;
+    if ENV_MAP.read().get(&req.msg.env_id).is_some() {
+        return Err(eg!("Aready exists!"));
+    }
+
     let slave_info = SLAVE_INFO.read().clone();
     let mut resource_pool = slave_info
         .clone()
