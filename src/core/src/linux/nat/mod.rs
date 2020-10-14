@@ -95,7 +95,7 @@ pub(crate) mod real {
     use lazy_static::lazy_static;
     use myutil::{err::*, *};
     use parking_lot::Mutex;
-    use std::{mem, process, sync::Arc};
+    use std::{collections::HashSet, mem, process, sync::Arc};
 
     const TABLE_PROTO: &str = "ip";
     const TABLE_NAME: &str = "tt-core";
@@ -169,11 +169,15 @@ pub(crate) mod real {
 
     // 清理指定端口对应的 NAT 规则
     pub(crate) fn clean_rule(vm_set: &[&Vm]) -> Result<()> {
+        // Ports are almost always duplicated,
+        // use `HashSet` to keep unique
         let port_set = vm_set
             .iter()
             .map(|vm| vm.port_map.values())
             .flatten()
-            .collect::<Vec<_>>();
+            .collect::<HashSet<_>>();
+
+        // Do NOT work for empty
         if port_set.is_empty() {
             return Ok(());
         }
