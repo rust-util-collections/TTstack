@@ -77,12 +77,11 @@ fn env_list_cb(r: &mut SlaveRes) {
             base
         });
 
-    // 从 Slave 正常返回的信息优先,
-    // 未正常返回的 Slave 信息保留原值
-    let mut map = ENV_MAP.write();
-    res.into_iter().for_each(|(k, v)| {
-        map.insert(k, v);
-    });
+    // 无法连通的 Slave 在元信息保留,
+    // 是一种干扰, 只保留有效信息即可.
+    // 另, 若不全量替换, Slave 端到期自动被清理掉的 ENV,
+    // 会依然保留在 Proxy 中, 导致在创建同名 ENV 时出错.
+    *ENV_MAP.write() = res;
 }
 
 #[inline(always)]
