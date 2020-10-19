@@ -3,7 +3,7 @@
 [![pipeline status](https://gitlab.com/ktmlm/tt/badges/master/pipeline.svg)](https://gitlab.com/ktmlm/tt/-/commits/master)
 [![coverage report](https://gitlab.com/ktmlm/tt/badges/master/coverage.svg)](https://gitlab.com/ktmlm/tt/-/commits/master)
 
-tt, Temporary Test.
+A light-weight 'private cloud solution' for SMEs, it can bring huge help and commercial value to start-up companies.
 
 面向中小型企业的轻量级私有云平台, 可快速生成各种虚拟机环境, 为产品兼容性验证和自动化测试提供高效的基础环境.
 
