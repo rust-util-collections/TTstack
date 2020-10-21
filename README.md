@@ -84,7 +84,7 @@ export PATH=~/.cargo/bin:$PATH
 ```shell
 # Slave Server 1
 ttserver \
-        --image-path /tmp/images \
+        --image-path /home/images \
         --cpu-total 2 \
         --mem-total $[4 * 1024 * 1024] \
         --disk-total $[40 * 1024 * 1024] \
@@ -93,7 +93,7 @@ ttserver \
 
 # Slave Server 2
 ttserver \
-        --image-path /tmp/images \
+        --image-path /home/images \
         --cpu-total 2 \
         --mem-total $[4 * 1024 * 1024] \
         --disk-total $[40 * 1024 * 1024] \
@@ -110,7 +110,7 @@ ttproxy \
 
 > **Tips**
 > - 完整的客户端操作文档, 参见: [《用户指南》](./documents/user_guide.md)
-> - "/tmp/images" 路径下需要存在可正常启动的 Qemu 镜像文件
+> - "/home/images" 路径下需要存在可正常启动的 Qemu 镜像文件
 > - 镜像文件中的 "/etc/rc.local" 文件需要替换为本项目定制的 "[rc.local](./tools/images/linux_vm/rc.local)"
 
 ```shell
