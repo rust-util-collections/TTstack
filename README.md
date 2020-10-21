@@ -68,10 +68,11 @@ A light-weight 'private cloud solution' for SMEs, it can bring huge help and com
 
 ## RoadMap
 
-- [] 完善英文文档
-- [] 添加配套的视频教程
-- [] 添加配套的前端界面
-- [] 支持对已创建的 ENV 打快照
+- [-] 完善英文文档
+- [-] 优化客户端的用户提示信息
+- [-] 添加配套的视频教程
+- [-] 添加配套的前端界面
+- [-] 支持对已创建的 ENV 打快照
     - `tt env snapshot <ENV> ...`
 
 ## Quick Start
