@@ -16,7 +16,7 @@ job_test:
   stage: test
   script:
     - make test
-    - cargo kcov --all --lib
+    - cargo kcov --all
     - COVERAGE=$(grep -Po '(?<="covered":")\d+(?:\.\d+)?(?=")' target/cov/index.js)
     # Tips: use '^Coverage:\s+(\d+(?:\.\d+)?)' on gitlab to capture the result
     - echo "Coverage:" ${COVERAGE}

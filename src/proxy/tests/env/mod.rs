@@ -61,7 +61,7 @@ pub(super) fn start_proxy() {
 }
 
 fn start_slave(cfg: SlaveCfg) {
-    match fork() {
+    match unsafe { fork() } {
         Ok(ForkResult::Child) => {
             pnk!(ttserver::start(cfg));
             process::exit(1);
@@ -74,8 +74,8 @@ fn start_slave(cfg: SlaveCfg) {
 }
 
 fn mock_cfg() -> (Cfg, SlaveCfg, SlaveCfg) {
-    let s1 = [IP_TEST, ":29527"].concat().to_owned();
-    let s2 = [IP_TEST, ":39527"].concat().to_owned();
+    let s1 = [IP_TEST, ":29527"].concat();
+    let s2 = [IP_TEST, ":39527"].concat();
 
     (
         Cfg {
@@ -107,7 +107,9 @@ fn mock_cfg() -> (Cfg, SlaveCfg, SlaveCfg) {
     )
 }
 
-/// 发送请求信息
+pub(super) type Sender<T> = fn(&str, Req<T>) -> Result<Resp>;
+
+/// 发送请求信息, UDP 协议
 pub(super) fn send_req<T: Serialize>(ops: &str, req: Req<T>) -> Result<Resp> {
     let ops_id = OPS_MAP
         .get(ops)
@@ -130,6 +132,30 @@ pub(super) fn send_req<T: Serialize>(ops: &str, req: Req<T>) -> Result<Resp> {
                 serde_json::from_slice(&resp_decompressed).c(d!())
             })
     })
+}
+
+/// 发送请求信息, HTTP/TCP 协议
+pub(super) fn send_req_http<T: Serialize>(
+    ops: &str,
+    req: Req<T>,
+) -> Result<Resp> {
+    let url = format!("http://127.0.0.1:19527/{}", ops);
+    let body = serde_json::to_vec(&req).c(d!())?;
+
+    attohttpc::post(&url)
+        .bytes(&body)
+        .send()
+        .c(d!())
+        .and_then(|resp| resp.bytes().c(d!()))
+        .and_then(|body| {
+            let mut d = ZlibDecoder::new(vct![]);
+            d.write_all(&body[..])
+                .c(d!())
+                .and_then(|_| d.finish().c(d!()))
+                .and_then(|resp_decompressed| {
+                    serde_json::from_slice(&resp_decompressed).c(d!())
+                })
+        })
 }
 
 fn gen_sock(timeout: u64) -> Result<UdpSocket> {

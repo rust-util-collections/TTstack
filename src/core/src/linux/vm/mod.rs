@@ -72,7 +72,7 @@ fn cmd_exec(cmd: &str, args: &[&str]) -> Result<()> {
 #[inline(always)]
 #[cfg(all(feature = "nft", any(feature = "cow", feature = "zfs")))]
 fn cmd_exec_daemonize(cmd: &str, args: &[&str]) -> Result<()> {
-    match fork() {
+    match unsafe { fork() } {
         Ok(ForkResult::Child) => pnk!(Err(eg!(process::Command::new(cmd)
             .stdin(Stdio::null())
             .stdout(Stdio::null())

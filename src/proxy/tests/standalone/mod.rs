@@ -7,17 +7,28 @@ const CUSTOM_CLI_ID: &str = "ErHa";
 
 // 孤立测试每一个接口
 pub(super) fn test() {
-    t_register_client_id();
-    t_get_server_info();
-    t_get_env_list();
-    t_get_env_info();
-    t_add_env();
-    t_update_env_lifetime();
-    t_update_env_kick_vm();
-    t_del_env();
+    // UDP protocol tests
+    t_register_client_id(send_req);
+    t_get_server_info(send_req);
+    t_get_env_list(send_req);
+    t_get_env_info(send_req);
+    t_add_env(send_req);
+    t_update_env_lifetime(send_req);
+    t_update_env_kick_vm(send_req);
+    t_del_env(send_req);
+
+    // HTTP/TCP protocol tests
+    t_register_client_id(send_req_http);
+    t_get_server_info(send_req_http);
+    t_get_env_list(send_req_http);
+    t_get_env_info(send_req_http);
+    t_add_env(send_req_http);
+    t_update_env_lifetime(send_req_http);
+    t_update_env_kick_vm(send_req_http);
+    t_del_env(send_req_http);
 }
 
-fn t_register_client_id() {
+fn t_register_client_id(send_req: Sender<&str>) {
     assert!(send_req("register_client_id", Req::new(0, "")).is_ok());
     assert!(
         send_req(
@@ -28,7 +39,7 @@ fn t_register_client_id() {
     );
 }
 
-fn t_get_server_info() {
+fn t_get_server_info(send_req: Sender<&str>) {
     let uuid = 1;
     let resp = pnk!(send_req("get_server_info", Req::new(uuid, "")));
 
@@ -68,7 +79,7 @@ fn t_get_server_info() {
 }
 
 // 在 add_env 之前调用
-fn t_get_env_list() {
+fn t_get_env_list(send_req: Sender<&str>) {
     let uuid = 2;
 
     let resp = pnk!(send_req("get_env_list", Req::new(uuid, "")));
@@ -86,7 +97,7 @@ fn t_get_env_list() {
     });
 }
 
-fn t_get_env_info() {
+fn t_get_env_info(send_req: Sender<ReqGetEnvInfo>) {
     let uuid = 3;
 
     let msg = ReqGetEnvInfo {
@@ -106,7 +117,7 @@ fn t_get_env_info() {
     assert_eq!(0, body.len());
 }
 
-fn t_add_env() {
+fn t_add_env(send_req: Sender<ReqAddEnv>) {
     let uuid = 4;
 
     let msg = ReqAddEnv {
@@ -131,7 +142,7 @@ fn t_add_env() {
     assert_eq!("Success!", &body);
 }
 
-fn t_update_env_lifetime() {
+fn t_update_env_lifetime(send_req: Sender<ReqUpdateEnvLife>) {
     let uuid = 5;
 
     let msg = ReqUpdateEnvLife {
@@ -146,7 +157,7 @@ fn t_update_env_lifetime() {
     assert_eq!(resp.status, RetStatus::Success);
 }
 
-fn t_update_env_kick_vm() {
+fn t_update_env_kick_vm(send_req: Sender<ReqUpdateEnvKickVm>) {
     let uuid = 6;
 
     let msg = ReqUpdateEnvKickVm {
@@ -164,7 +175,7 @@ fn t_update_env_kick_vm() {
     assert_eq!("Success!", &body);
 }
 
-fn t_del_env() {
+fn t_del_env(send_req: Sender<ReqDelEnv>) {
     let uuid = 7;
 
     let msg = ReqDelEnv {

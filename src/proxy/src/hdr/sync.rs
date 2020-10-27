@@ -5,6 +5,7 @@
 use super::*;
 use crate::{fwd_to_slave, CFG};
 use async_std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use nix::sys::socket::{InetAddr, SockAddr};
 use std::{thread, time::Duration};
 use ttserver_def::*;
 
@@ -85,6 +86,9 @@ fn env_list_cb(r: &mut SlaveRes) {
 }
 
 #[inline(always)]
-fn mock_addr() -> SocketAddr {
-    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 35107)
+fn mock_addr() -> SockAddr {
+    SockAddr::new_inet(InetAddr::from_std(&SocketAddr::new(
+        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+        35107,
+    )))
 }

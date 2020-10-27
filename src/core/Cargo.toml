@@ -10,7 +10,7 @@ keywords = ["firecracker", "qemu", "kvm", "openstack", "k8s", "cloud"]
 categories = ["command-line-utilities"]
 
 [dependencies]
-nix = "0.18"
+nix = "0.19"
 libc = "0.2"
 lazy_static = "1.4"
 parking_lot = "0.11"

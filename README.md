@@ -69,10 +69,10 @@ A light-weight 'private cloud solution' for SMEs, it can bring huge help and com
 ## RoadMap
 
 - [-] 完善英文文档
-- [-] 优化客户端的用户提示信息
+- [-] 优化客户端的用户提示信息(当前显示给用户的是开发端的信息)
 - [-] 添加配套的视频教程
-- [-] 添加配套的前端界面
-- [-] 支持对已创建的 ENV 打快照
+- [-] 添加配套的前端界面(done: http interfaces on `ttproxy`)
+- [-] 支持对已创建的 ENV 打快照(多级快照如何高效管理?)
     - `tt env snapshot <ENV> ...`
 
 ## Quick Start

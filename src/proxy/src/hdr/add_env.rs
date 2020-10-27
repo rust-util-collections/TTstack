@@ -12,7 +12,7 @@ use std::collections::HashSet;
 /// 要分割资源之后再分发
 pub(super) fn add_env(
     ops_id: usize,
-    peeraddr: SocketAddr,
+    peeraddr: SockAddr,
     request: Vec<u8>,
 ) -> Result<()> {
     let mut req = serde_json::from_slice::<MyReq>(&request).c(d!())?;
@@ -88,15 +88,12 @@ pub(super) fn add_env(
 fn send_req(
     ops_id: usize,
     mut req: MyReq,
-    peeraddr: SocketAddr,
+    peeraddr: SockAddr,
     jobs: Vec<(SocketAddr, Vec<String>)>,
 ) -> Result<()> {
     let num_to_wait = jobs.len();
     let proxy_uuid = gen_proxy_uuid();
-    let cli_id = req
-        .cli_id
-        .take()
-        .unwrap_or_else(|| peeraddr.ip().to_string());
+    let cli_id = req.cli_id.take().unwrap_or_else(|| peeraddr.to_str());
 
     register_resp_hdr(
         num_to_wait,

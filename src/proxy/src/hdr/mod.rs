@@ -14,6 +14,7 @@ use add_env::add_env;
 use async_std::{net::SocketAddr, task};
 use lazy_static::lazy_static;
 use myutil::{err::*, *};
+use nix::sys::socket::SockAddr;
 use parking_lot::RwLock;
 use serde::Deserialize;
 use serde::Serialize;
@@ -34,7 +35,7 @@ lazy_static! {
         Arc::new(RwLock::new(map! {}));
 }
 
-type Ops = fn(usize, SocketAddr, Vec<u8>) -> Result<()>;
+type Ops = fn(usize, SockAddr, Vec<u8>) -> Result<()>;
 include!("../../../server_def/src/included_ops_map.rs");
 
 /// 将客户端的请求,
@@ -47,7 +48,7 @@ macro_rules! fwd_to_slave {
 
         register_resp_hdr(num_to_wait, $cb, $peeraddr, $req.uuid, proxy_uuid);
 
-        let cli_id = $req.cli_id.take().unwrap_or_else(||$peeraddr.ip().to_string());
+        let cli_id = $req.cli_id.take().unwrap_or_else(||$peeraddr.to_str());
         send_req_to_slave($ops_id, Req::newx(proxy_uuid, Some(cli_id), mem::take(&mut $req.msg)), $addr_set)
             .c(d!())
     }};
@@ -73,9 +74,9 @@ macro_rules! fwd_to_slave {
 /// 注册 Cli, 一般无需调用,
 /// 创建 Env 时若发现 Cli 不存在会自动创建之,
 /// 此接口在 Proxy 中实现为"什么都不做, 直接返回成功".
-fn register_client_id(
+pub(crate) fn register_client_id(
     _ops_id: usize,
-    peeraddr: SocketAddr,
+    peeraddr: SockAddr,
     request: Vec<u8>,
 ) -> Result<()> {
     let req = serde_json::from_slice::<Req<&str>>(&request).c(d!())?;
@@ -89,9 +90,9 @@ fn register_client_id(
 
 /// 获取服务端的资源分配信息,
 /// 直接从定时任务的结果中提取, 不做实时请求.
-fn get_server_info(
+pub(crate) fn get_server_info(
     ops_id: usize,
-    peeraddr: SocketAddr,
+    peeraddr: SockAddr,
     request: Vec<u8>,
 ) -> Result<()> {
     // 汇聚各 Slave 的信息
@@ -106,9 +107,9 @@ fn get_server_info(
 }
 
 /// 获取服务端已存在的 Env 概略信息
-fn get_env_list(
+pub(crate) fn get_env_list(
     ops_id: usize,
-    peeraddr: SocketAddr,
+    peeraddr: SockAddr,
     request: Vec<u8>,
 ) -> Result<()> {
     // 汇聚各 Slave 的信息
@@ -123,9 +124,9 @@ fn get_env_list(
 }
 
 // 获取服务端已存在的 Env 详细信息
-fn get_env_info(
+pub(crate) fn get_env_info(
     ops_id: usize,
-    peeraddr: SocketAddr,
+    peeraddr: SockAddr,
     request: Vec<u8>,
 ) -> Result<()> {
     #[derive(Deserialize)]
@@ -163,9 +164,9 @@ fn get_env_info(
 }
 
 /// 从已有 ENV 中踢出指定的 VM 实例
-fn update_env_kick_vm(
+pub(crate) fn update_env_kick_vm(
     ops_id: usize,
-    peeraddr: SocketAddr,
+    peeraddr: SockAddr,
     request: Vec<u8>,
 ) -> Result<()> {
     #[derive(Deserialize)]
@@ -179,9 +180,9 @@ fn update_env_kick_vm(
 }
 
 /// 更新已有 Env 的生命周期
-fn update_env_lifetime(
+pub(crate) fn update_env_lifetime(
     ops_id: usize,
-    peeraddr: SocketAddr,
+    peeraddr: SockAddr,
     request: Vec<u8>,
 ) -> Result<()> {
     #[derive(Deserialize)]
@@ -201,9 +202,9 @@ fn update_env_lifetime(
 }
 
 /// 删除 Env
-fn del_env(
+pub(crate) fn del_env(
     ops_id: usize,
-    peeraddr: SocketAddr,
+    peeraddr: SockAddr,
     request: Vec<u8>,
 ) -> Result<()> {
     #[derive(Deserialize)]
@@ -225,9 +226,9 @@ fn del_env(
 
 /// 获取服务端已存在的 Env 概略信息(全局)
 #[inline(always)]
-fn get_env_list_all(
+pub(crate) fn get_env_list_all(
     ops_id: usize,
-    peeraddr: SocketAddr,
+    peeraddr: SockAddr,
     request: Vec<u8>,
 ) -> Result<()> {
     get_env_list(ops_id, peeraddr, request).c(d!())
@@ -237,9 +238,9 @@ fn get_env_list_all(
 /// - 保留临时镜像和端口影射
 /// - 停止所有 VM 进程
 /// - 资源计数递减
-fn stop_env(
+pub(crate) fn stop_env(
     ops_id: usize,
-    peeraddr: SocketAddr,
+    peeraddr: SockAddr,
     request: Vec<u8>,
 ) -> Result<()> {
     #[derive(Deserialize)]
@@ -255,9 +256,9 @@ fn stop_env(
 /// 恢复运行先前被 stop 的 ENV
 /// - 启动所有 VM 进程
 /// - 资源计数递增
-fn start_env(
+pub(crate) fn start_env(
     ops_id: usize,
-    peeraddr: SocketAddr,
+    peeraddr: SockAddr,
     request: Vec<u8>,
 ) -> Result<()> {
     #[derive(Deserialize)]
@@ -271,9 +272,9 @@ fn start_env(
 }
 
 /// 更新已有 ENV 中资源配置信息
-fn update_env_resource(
+pub(crate) fn update_env_resource(
     ops_id: usize,
-    peeraddr: SocketAddr,
+    peeraddr: SockAddr,
     request: Vec<u8>,
 ) -> Result<()> {
     #[derive(Deserialize)]
@@ -384,7 +385,7 @@ fn send_req_to_slave<T: Serialize>(
 fn register_resp_hdr(
     num_to_wait: usize,
     cb: fn(&mut SlaveRes),
-    peeraddr: SocketAddr,
+    peeraddr: SockAddr,
     orig_uuid: UUID,
     proxy_uuid: UUID,
 ) {

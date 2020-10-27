@@ -9,6 +9,7 @@
 pub mod cfg;
 mod def;
 mod hdr;
+mod http;
 mod util;
 
 use async_std::{
@@ -21,12 +22,22 @@ use flate2::write::ZlibDecoder;
 use lazy_static::lazy_static;
 use myutil::{err::*, *};
 use parking_lot::Mutex;
-use std::{io::Write, sync::mpsc::channel};
+use std::{
+    io::Write,
+    os::unix::io::{IntoRawFd, RawFd},
+    sync::mpsc::channel,
+    thread,
+};
 use ttserver_def::*;
 
 lazy_static! {
     static ref CFG: &'static cfg::Cfg = pnk!(cfg::register_cfg(None));
+    /// 与客户端交互
     static ref SOCK: UdpSocket = pnk!(gen_master_sock());
+    /// HTTP 与 UDP 发来的客户端消息, 处理流程一致,
+    /// 都经由此 Unix(Unix Domain) Abstract Socket 中转
+    static ref SOCK_UAU: RawFd = pnk!(util::gen_uau_socket(include_bytes!("uau.addr"))).0.into_raw_fd();
+    /// 与后端的 TT Slave 服务端交互
     static ref SOCK_MID: UdpSocket = pnk!(gen_middle_sock());
     static ref PROXY: Arc<Mutex<Proxy>> =
         Arc::new(Mutex::new(Proxy::default()));
@@ -36,11 +47,16 @@ lazy_static! {
 pub fn start(cfg: cfg::Cfg) -> Result<()> {
     pnk!(cfg::register_cfg(Some(cfg)));
 
-    start_middle_serv();
-    task::spawn(start_serv());
+    thread::spawn(|| {
+        hdr::sync::start_cron();
+    });
 
-    // this is a loop
-    hdr::sync::start_cron();
+    start_middle_serv();
+    start_serv_udp();
+
+    // will block
+    start_serv_http();
+
     Ok(())
 }
 
@@ -82,7 +98,7 @@ fn start_middle_serv() {
     }
 
     task::spawn(async {
-        // At most 64KB can be sent on UDP
+        // At most 64KB can be sent on UDP/INET[4/6]
         let mut buf = vec![0; 64 * 1024];
         loop {
             if let Ok((size, peeraddr)) =
@@ -105,43 +121,94 @@ fn start_middle_serv() {
     });
 }
 
-/// 主线程 Daemon
+/// 与 Cli 端交互,
+/// 使用 Http/TCP 协议
 #[inline(always)]
-async fn start_serv() -> Result<()> {
-    let mut buf = vec![0; 8192];
+fn start_serv_http() {
+    let mut app = tide::new();
+    app.at("/register_client_id").post(http::register_client_id);
+    app.at("/get_server_info").post(http::get_server_info);
+    app.at("/get_env_list").post(http::get_env_list);
+    app.at("/get_env_info").post(http::get_env_info);
+    app.at("/add_env").post(http::add_env);
+    app.at("/del_env").post(http::del_env);
+    app.at("/update_env_lifetime")
+        .post(http::update_env_lifetime);
+    app.at("/update_env_kick_vm").post(http::update_env_kick_vm);
+    app.at("/get_env_list_all").post(http::get_env_list_all);
+    app.at("/stop_env").post(http::stop_env);
+    app.at("/start_env").post(http::start_env);
+    app.at("/update_env_resource")
+        .post(http::update_env_resource);
 
-    loop {
-        if let Ok((size, peeraddr)) = info!(SOCK.recv_from(&mut buf).await) {
-            if size < OPS_ID_LEN {
-                p(eg!(format!("Invalid request from {}", peeraddr)));
-                continue;
-            }
-
-            parse_ops_id(&buf[0..OPS_ID_LEN])
-                .c(d!())
-                .map(|ops_id| {
-                    let recvd = buf[OPS_ID_LEN..size].to_vec();
-                    task::spawn(async move {
-                        info_omit!(serv_it(ops_id, recvd, peeraddr));
-                    });
-                })
-                .unwrap_or_else(|e| p(e));
-        }
-    }
+    // As daemon
+    pnk!(task::block_on(app.listen(&*CFG.proxy_serv_at)));
 }
 
+/// 与 Cli 端交互,
+/// 使用 Udp 协议
 #[inline(always)]
-fn serv_it(
+fn start_serv_udp() {
+    task::spawn(async {
+        let mut buf = vec![0; 8192];
+        loop {
+            if let Ok((size, peeraddr)) = info!(SOCK.recv_from(&mut buf).await)
+            {
+                if size < OPS_ID_LEN {
+                    p(eg!(format!("Invalid request from {}", peeraddr)));
+                    continue;
+                }
+
+                parse_ops_id(&buf[0..OPS_ID_LEN])
+                    .c(d!())
+                    .map(|ops_id| {
+                        let recvd = buf[OPS_ID_LEN..size].to_vec();
+                        task::spawn(async move {
+                            info_omit!(
+                                serv_it_udp(ops_id, recvd, peeraddr).await
+                            );
+                        });
+                    })
+                    .unwrap_or_else(|e| p(e));
+            }
+        }
+    });
+}
+
+// 保持与 HTTP 相同的处理流程,
+// 以简化底层核心数据结构设计
+#[inline(always)]
+async fn serv_it_udp(
     ops_id: usize,
     request: Vec<u8>,
     peeraddr: SocketAddr,
 ) -> Result<()> {
-    if let Some(ops) = hdr::OPS_MAP.get(ops_id) {
-        ops(ops_id, peeraddr, request)
+    let (mysock, myaddr) =
+        match util::gen_uau_socket(&peeraddr.ip().to_string().into_bytes())
             .c(d!())
-            .or_else(|e| send_err!(DEFAULT_REQ_ID, e, peeraddr))
+        {
+            Ok((s, a)) => (s, a),
+            Err(e) => {
+                return send_err!(@DEFAULT_REQ_ID, e, peeraddr);
+            }
+        };
+
+    if let Some(ops) = hdr::OPS_MAP.get(ops_id) {
+        ops(ops_id, myaddr, request)
+            .c(d!())
+            .or_else(|e| send_err!(@DEFAULT_REQ_ID, e, peeraddr))?;
+
+        let mut buf = vec![0; 64 * 1024];
+        match mysock.recv(&mut buf).await.c(d!()) {
+            Ok(siz) => SOCK
+                .send_to(&buf[..siz], peeraddr)
+                .await
+                .c(d!())
+                .map(|_| ()),
+            Err(e) => send_err!(@DEFAULT_REQ_ID, e, peeraddr),
+        }
     } else {
-        send_err!(DEFAULT_REQ_ID, eg!("Invalid operation-id !"), peeraddr)
+        send_err!(@DEFAULT_REQ_ID, eg!("Invalid operation-ID !!!"), peeraddr)
     }
 }
 
