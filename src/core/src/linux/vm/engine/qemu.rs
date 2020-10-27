@@ -113,7 +113,7 @@ pub(super) fn start(vm: &Vm) -> Result<()> {
     let uuid = if vm.rnd_uuid {
         gen_vm_uuid().c(d!())?
     } else {
-        "tttttttt-tttt-tttt-tttt-tttttttttttt".to_owned()
+        "5ce41b72-0e2e-48f9-8422-7647b557aba8".to_owned()
     };
 
     let args = &[
