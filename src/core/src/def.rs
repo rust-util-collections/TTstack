@@ -748,6 +748,8 @@ pub struct VmCfg {
     pub mem_size: Option<u32>,
     /// 单位: MB
     pub disk_size: Option<u32>,
+    /// VM uuid 随机化(唯一)
+    pub rnd_uuid: bool,
 }
 
 /// 描述一个容器实例的信息
@@ -776,6 +778,9 @@ pub struct Vm {
 
     /// 是否处于暂停流程中
     pub during_stop: bool,
+
+    /// VM 的 UUID 是否需要随机(唯一)生成
+    pub rnd_uuid: bool,
 }
 
 impl Vm {
@@ -819,6 +824,7 @@ impl Vm {
                 },
             ),
             during_stop: false,
+            rnd_uuid: cfg.rnd_uuid,
         };
 
         // 创建之后须立即计数

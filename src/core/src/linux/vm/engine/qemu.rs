@@ -110,7 +110,11 @@ pub(super) fn start(vm: &Vm) -> Result<()> {
     );
 
     let (disk, disk_device) = gen_disk_info(vm);
-    let uuid = gen_vm_uuid().c(d!())?;
+    let uuid = if vm.rnd_uuid {
+        gen_vm_uuid().c(d!())?
+    } else {
+        "tttttttt-tttt-tttt-tttt-tttttttttttt".to_owned()
+    };
 
     let args = &[
         "-enable-kvm",

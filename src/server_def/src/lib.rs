@@ -134,6 +134,7 @@ pub struct ReqAddEnv {
     pub port_set: Vec<Port>,
     pub dup_each: Option<u32>,
     pub deny_outgoing: bool,
+    pub rnd_uuid: bool,
 }
 
 /// 公开给 Cli 使用

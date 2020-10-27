@@ -50,23 +50,24 @@ pub fn parse_and_exec() -> Result<()> {
         .about(crate_description!())
         .subcommands(vct![
             SubCommand::with_name("config")
-            .arg_from_usage("-a, --server-addr=[ADDR] '服务端的监听地址.'")
-            .arg_from_usage("-p, --server-port=[PORT] '服务端的监听端口.'")
-            .arg_from_usage("-n, --client-id=[NAME] '客户端别名.'"),
+            .arg_from_usage("-a, --server-addr=[ADDR] '服务端的监听地址'")
+            .arg_from_usage("-p, --server-port=[PORT] '服务端的监听端口'")
+            .arg_from_usage("-n, --client-id=[NAME] '客户端别名'"),
             SubCommand::with_name("status")
-            .arg_from_usage("-c, --client '查看客户端状态.'")
-            .arg_from_usage("-s, --server '查看服务端状态.'"),
+            .arg_from_usage("-c, --client '查看客户端状态'")
+            .arg_from_usage("-s, --server '查看服务端状态'"),
             SubCommand::with_name("env").subcommands(vct![
                 SubCommand::with_name("add")
                     .arg(Arg::with_name("ENV").required(true).help("待创建的环境名称."))
-                    .arg_from_usage("-n, --deny-outgoing '禁止虚拟机对外连网.'")
-                    .arg_from_usage("-l, --life-time=[TIME] '虚拟机的生命周期, 单位: 秒.'")
-                    .arg_from_usage("-C, --cpu-num=[CPU_SIZE] '虚拟机的 CPU 核心数量.'")
-                    .arg_from_usage("-M, --mem-size=[MEM_SIZE] '虚拟机的内存容量, 单位: MB.'")
-                    .arg_from_usage("-D, --disk-size=[DISK_SIZE] '虚拟机的磁盘容量, 单位: MB.'")
-                    .arg_from_usage("-d, --dup-each=[NUM] '每种虚拟机类型启动的实例数量.'")
-                    .arg_from_usage("-s, --os-prefix=[OS]... '虚拟机的系统, 如: CentOS7.x 等.'")
-                    .arg_from_usage("-p, --vm-port=[PORT]... '虚拟机需要开放的网络端口.'"),
+                    .arg_from_usage("-n, --deny-outgoing '禁止虚拟机对外连网'")
+                    .arg_from_usage("-l, --life-time=[TIME] '虚拟机的生命周期, 单位: 秒'")
+                    .arg_from_usage("-C, --cpu-num=[CPU_SIZE] '虚拟机的 CPU 核心数量'")
+                    .arg_from_usage("-M, --mem-size=[MEM_SIZE] '虚拟机的内存容量, 单位: MB'")
+                    .arg_from_usage("-D, --disk-size=[DISK_SIZE] '虚拟机的磁盘容量, 单位: MB'")
+                    .arg_from_usage("-d, --dup-each=[NUM] '每种虚拟机类型启动的实例数量'")
+                    .arg_from_usage("-s, --os-prefix=[OS]... '虚拟机的系统, 如: CentOS7.x 等'")
+                    .arg_from_usage("-p, --vm-port=[PORT]... '虚拟机需要开放的网络端口'")
+                    .arg_from_usage("--same-uuid '所有虚拟机都使用同一个 UUID'"),
                 SubCommand::with_name("del")
                 .arg(
                     Arg::with_name("ENV")
@@ -104,22 +105,22 @@ pub fn parse_and_exec() -> Result<()> {
                             .multiple(true)
                             .help("一个或多个环境名称.")
                     )
-                    .arg_from_usage("--SSSS '指定任意生命周期.'")
-                    .arg_from_usage("-l, --life-time=[TIME] '新的生命周期.'")
-                    .arg_from_usage("-C, --cpu-num=[CPU_SIZE] '新的 CPU 数量.'")
-                    .arg_from_usage("-M, --mem-size=[MEM_SIZE] '新的内存容量, 单位: MB.'")
-                    .arg_from_usage("-p, --vm-port=[PORT]... '新的网络端口集合(全量替换, 非增量计算).'")
-                    .arg_from_usage("-n, --deny-outgoing '禁止虚拟机对外连网.'")
-                    .arg_from_usage("-y, --allow-outgoing '允许虚拟机对外连网.'")
-                    .args_from_usage("--kick-dead '清除所有失去响应的 VM 实例.'")
-                    .args_from_usage("--kick-vm=[VM_ID]... '待剔除的 VM 的 ID.'")
-                    .args_from_usage("--kick-os=[OS_PREFIX]... '待剔除的系统名称前缀.'"),
+                    .arg_from_usage("--SSSS '指定任意生命周期'")
+                    .arg_from_usage("-l, --life-time=[TIME] '新的生命周期'")
+                    .arg_from_usage("-C, --cpu-num=[CPU_SIZE] '新的 CPU 数量'")
+                    .arg_from_usage("-M, --mem-size=[MEM_SIZE] '新的内存容量, 单位: MB'")
+                    .arg_from_usage("-p, --vm-port=[PORT]... '新的网络端口集合(全量替换, 非增量计算)'")
+                    .arg_from_usage("-n, --deny-outgoing '禁止虚拟机对外连网'")
+                    .arg_from_usage("-y, --allow-outgoing '允许虚拟机对外连网'")
+                    .args_from_usage("--kick-dead '清除所有失去响应的 VM 实例'")
+                    .args_from_usage("--kick-vm=[VM_ID]... '待剔除的 VM 的 ID'")
+                    .args_from_usage("--kick-os=[OS_PREFIX]... '待剔除的系统名称前缀'"),
                 SubCommand::with_name("get")
-                    .arg_from_usage("--use-ssh '使用 SSH 协议通信.'")
-                    .arg_from_usage("-f, --file-path=[PATH] '文件在远程的路径.'")
-                    .arg_from_usage("-t, --time-out=[TIME] '可执行的最长时间, 单位: 秒.'")
-                    .arg_from_usage("-s, --os-prefix=[OS]... '按系统名称前缀筛选.'")
-                    .arg_from_usage("-m, --vm-id=[VM]... '按 VmId 精确筛选.'")
+                    .arg_from_usage("--use-ssh '使用 SSH 协议通信'")
+                    .arg_from_usage("-f, --file-path=[PATH] '文件在远程的路径'")
+                    .arg_from_usage("-t, --time-out=[TIME] '可执行的最长时间, 单位: 秒'")
+                    .arg_from_usage("-s, --os-prefix=[OS]... '按系统名称前缀筛选'")
+                    .arg_from_usage("-m, --vm-id=[VM]... '按 VmId 精确筛选'")
                     .arg(
                         Arg::with_name("ENV")
                             .required(true)
@@ -127,11 +128,11 @@ pub fn parse_and_exec() -> Result<()> {
                             .multiple(true)
                     ),
                 SubCommand::with_name("push")
-                    .arg_from_usage("--use-ssh '使用 SSH 协议通信.'")
-                    .arg_from_usage("-f, --file-path=[PATH] '文件在本地的路径.'")
-                    .arg_from_usage("-t, --time-out=[TIME] '可执行的最长时间, 单位: 秒.'")
-                    .arg_from_usage("-s, --os-prefix=[OS]... '按系统名称前缀筛选.'")
-                    .arg_from_usage("-m, --vm-id=[VM]... '按 VmId 精确筛选.'")
+                    .arg_from_usage("--use-ssh '使用 SSH 协议通信'")
+                    .arg_from_usage("-f, --file-path=[PATH] '文件在本地的路径'")
+                    .arg_from_usage("-t, --time-out=[TIME] '可执行的最长时间, 单位: 秒'")
+                    .arg_from_usage("-s, --os-prefix=[OS]... '按系统名称前缀筛选'")
+                    .arg_from_usage("-m, --vm-id=[VM]... '按 VmId 精确筛选'")
                     .arg(
                         Arg::with_name("ENV")
                             .required(true)
@@ -139,14 +140,14 @@ pub fn parse_and_exec() -> Result<()> {
                             .multiple(true)
                     ),
                 SubCommand::with_name("run")
-                    .arg_from_usage("--use-ssh '使用 SSH 协议通信.'")
-                    .arg_from_usage("-c, --cmd=[CMD] 'SHELL 命令.'")
-                    .arg_from_usage("-i, --interactive '交互式串行操作.'")
-                    .arg_from_usage("-x, --config-hawk '注册到 HAWK 监控系统.'")
-                    .arg_from_usage("-f, --script=[PATH] '脚本文件的本地路径.'")
-                    .arg_from_usage("-t, --time-out=[TIME] '可执行的最长时间, 单位: 秒.'")
-                    .arg_from_usage("-s, --os-prefix=[OS]... '按系统名称前缀筛选.'")
-                    .arg_from_usage("-m, --vm-id=[VM]... '按 VmId 精确筛选.'")
+                    .arg_from_usage("--use-ssh '使用 SSH 协议通信'")
+                    .arg_from_usage("-c, --cmd=[CMD] 'SHELL 命令'")
+                    .arg_from_usage("-i, --interactive '交互式串行操作'")
+                    .arg_from_usage("-x, --config-hawk '注册到 HAWK 监控系统'")
+                    .arg_from_usage("-f, --script=[PATH] '脚本文件的本地路径'")
+                    .arg_from_usage("-t, --time-out=[TIME] '可执行的最长时间, 单位: 秒'")
+                    .arg_from_usage("-s, --os-prefix=[OS]... '按系统名称前缀筛选'")
+                    .arg_from_usage("-m, --vm-id=[VM]... '按 VmId 精确筛选'")
                     .arg(
                         Arg::with_name("ENV")
                             .required(true)
@@ -233,6 +234,7 @@ fn env_add<'a>(m: &'a ArgMatches<'a>) -> Result<EnvAdd<'a>> {
             disk_size: option_num_parse!(disk_size, 0, u32),
             dup_each: option_num_parse!(dup_each, 0, u32),
             deny_outgoing: m.is_present("deny-outgoing"),
+            rnd_uuid: !m.is_present("same-uuid"),
         }),
         _ => Err(eg!()),
     }

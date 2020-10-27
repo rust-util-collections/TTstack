@@ -68,6 +68,7 @@ SUBCOMMANDS:
 > FLAGS:
 >     -n, --deny-outgoing    禁止虚拟机对外连网.
 >     -h, --help             Prints help information
+>         --same-uuid        所有虚拟机都使用同一个 UUID.
 >     -V, --version          Prints version information
 >
 > OPTIONS:

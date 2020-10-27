@@ -156,6 +156,7 @@ impl ReqAddEnvWrap {
                     cpu_num: me.0.cpu_num,
                     mem_size: me.0.mem_size,
                     disk_size: me.0.disk_size,
+                    rnd_uuid: me.0.rnd_uuid,
                 })
             })
             .flatten()

@@ -144,6 +144,7 @@ struct AddEnv {
     pub port_set: Vec<Port>,
     pub dup_each: u32,
     pub deny_outgoing: bool,
+    pub rnd_uuid: bool,
 }
 
 impl From<ReqAddEnv> for AddEnv {
@@ -158,6 +159,7 @@ impl From<ReqAddEnv> for AddEnv {
             port_set: req.port_set,
             dup_each: req.dup_each.unwrap_or(0),
             deny_outgoing: req.deny_outgoing,
+            rnd_uuid: req.rnd_uuid,
         }
     }
 }
@@ -174,6 +176,7 @@ impl From<AddEnv> for ReqAddEnv {
             port_set: x.port_set,
             dup_each: Some(x.dup_each),
             deny_outgoing: x.deny_outgoing,
+            rnd_uuid: x.rnd_uuid,
         }
     }
 }
