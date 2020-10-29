@@ -22,13 +22,3 @@ job_test:
     - echo "Coverage:" ${COVERAGE}
   tags:
     - rust
-
-job_deploy:
-  image: alpine-dev:v0.4
-  stage: deploy
-  script:
-    - make lint
-    - make install
-    - scp /usr/local/bin/tt* root@192.168.3.22:/data/ftp_home/tt_releases/linux/
-  tags:
-    - rust
