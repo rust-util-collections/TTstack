@@ -450,7 +450,10 @@ impl Env {
         vm_port: &[Port],
         deny_outgoing: Option<bool>,
     ) -> Result<()> {
-        if cpu_num.and(mem_size).and(disk_size).is_some() {
+        if [&cpu_num, &mem_size, &disk_size]
+            .iter()
+            .any(|i| i.is_some())
+        {
             if !self.is_stopped {
                 return Err(eg!(
                     "ENV must be stopped before updating it's hardware[s]."
@@ -655,11 +658,7 @@ impl Env {
     // - @cfg: (cpu_num, mem_size, disk_size)
     fn check_resource_and_set(&self, cfg: (u32, u32, u32)) -> Result<()> {
         if let Some(s) = self.serv_belong_to.upgrade() {
-            let rsc;
-            {
-                rsc = *s.resource.read();
-            }
-
+            let rsc = { *s.resource.read() };
             let vm_num = self.vm.len() as u64;
 
             let (cpu, mem, disk) =
