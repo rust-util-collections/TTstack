@@ -16,7 +16,6 @@ lazy_static = "1.4"
 
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-flate2 = "1.0"
 
 futures = { version = "0.3", features = ["thread-pool"] }
 futures-timer = "3.0"
@@ -24,6 +23,7 @@ futures-timer = "3.0"
 num_cpus = "1.13"
 parking_lot = "0.11"
 
+ttutils = { path = "../utils" }
 ttcore = { path = "../core", default-features = false }
 ttserver_def = { path = "../server_def" }
 

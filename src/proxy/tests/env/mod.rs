@@ -1,11 +1,9 @@
-use flate2::write::ZlibDecoder;
 use lazy_static::lazy_static;
 use myutil::{err::*, *};
 use nix::unistd::{fork, getuid, ForkResult};
 use serde::Serialize;
 use std::{
     collections::HashMap,
-    io::Write,
     net::{SocketAddr, UdpSocket},
     process, thread,
     time::Duration,
@@ -13,6 +11,7 @@ use std::{
 use ttproxy::cfg::Cfg;
 use ttserver::cfg::Cfg as SlaveCfg;
 use ttserver_def::*;
+use ttutils::zlib;
 
 pub(super) const CPU_TOTAL: u32 = 48;
 pub(super) const MEM_TOTAL: u32 = 64 * 1024;
@@ -116,18 +115,19 @@ pub(super) fn send_req<T: Serialize>(ops: &str, req: Req<T>) -> Result<Resp> {
         .copied()
         .ok_or(eg!(format!("Unknown request: {}", ops)))?;
 
+    let mut req_bytes = serde_json::to_vec(&req)
+        .c(d!())
+        .and_then(|req| zlib::encode(&req[..]).c(d!()))?;
     let mut body =
         format!("{id:>0width$}", id = ops_id, width = OPS_ID_LEN).into_bytes();
-    body.append(&mut serde_json::to_vec(&req).c(d!())?);
+    body.append(&mut req_bytes);
 
     CLI_SOCK.send_to(&body, *SERV_ADDR).c(d!()).and_then(|_| {
         let mut buf = vct![0; 8 * 4096];
         let size = CLI_SOCK.recv(&mut buf).c(d!())?;
 
-        let mut d = ZlibDecoder::new(vct![]);
-        d.write_all(&buf[..size])
+        zlib::decode(&buf[..size])
             .c(d!())
-            .and_then(|_| d.finish().c(d!()))
             .and_then(|resp_decompressed| {
                 serde_json::from_slice(&resp_decompressed).c(d!())
             })
@@ -148,10 +148,8 @@ pub(super) fn send_req_http<T: Serialize>(
         .c(d!())
         .and_then(|resp| resp.bytes().c(d!()))
         .and_then(|body| {
-            let mut d = ZlibDecoder::new(vct![]);
-            d.write_all(&body[..])
+            zlib::decode(&body[..])
                 .c(d!())
-                .and_then(|_| d.finish().c(d!()))
                 .and_then(|resp_decompressed| {
                     serde_json::from_slice(&resp_decompressed).c(d!())
                 })

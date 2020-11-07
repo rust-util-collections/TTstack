@@ -27,6 +27,7 @@ use std::{
     },
 };
 use ttserver_def::*;
+use ttutils::zlib;
 
 lazy_static! {
     static ref ENV_MAP: Arc<RwLock<HashMap<EnvId, Vec<SocketAddr>>>> =
@@ -352,7 +353,9 @@ fn send_req_to_slave<T: Serialize>(
     req: Req<T>,
     slave_set: &[SocketAddr],
 ) -> Result<()> {
-    let mut req_bytes = serde_json::to_vec(&req).c(d!())?;
+    let mut req_bytes = serde_json::to_vec(&req)
+        .c(d!())
+        .and_then(|req| zlib::encode(&req[..]).c(d!()))?;
     let mut body =
         format!("{id:>0width$}", id = ops_id, width = OPS_ID_LEN).into_bytes();
     body.append(&mut req_bytes);
@@ -374,7 +377,9 @@ fn send_req_to_slave<T: Serialize>(
         return Ok(());
     }
 
-    // 单独处理第一个 slave, 避免无谓的 clone
+    // 非空的情况,
+    // 单独处理第一个 slave,
+    // 避免无谓的 clone
     let first_slave = slave_set[0];
     do_send!(body, first_slave);
 

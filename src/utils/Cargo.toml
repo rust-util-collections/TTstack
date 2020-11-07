@@ -1,0 +1,12 @@
+[package]
+name = "ttutils"
+version = "0.1.0"
+authors = ["FanHui <hui.fan@mail.ru>"]
+edition = "2018"
+
+[dependencies]
+flate2 = "1.0"
+myutil = { git = "https://gitee.com/kt10/myutil", branch = "master" }
+
+[dev-dependencies]
+rand = "0.7"

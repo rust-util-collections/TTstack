@@ -20,6 +20,7 @@ use std::{
     net::{SocketAddr, UdpSocket},
     sync::Arc,
 };
+use ttutils::zlib;
 
 lazy_static! {
     static ref POOL: ThreadPool = pnk!(util::gen_thread_pool(Some(8)));
@@ -58,11 +59,13 @@ fn start_netserv() -> ! {
             }
             parse_ops_id(&buf[..OPS_ID_LEN])
                 .c(d!())
-                .map(|ops_id| {
-                    let recvd = buf[OPS_ID_LEN..size].to_vec();
+                .and_then(|ops_id| {
+                    let recvd =
+                        zlib::decode(&buf[OPS_ID_LEN..size]).c(d!())?;
                     POOL.spawn_ok(async move {
                         info_omit!(serv_it(ops_id, recvd, peeraddr).await);
                     });
+                    Ok(())
                 })
                 .unwrap_or_else(|e| p(e));
         }

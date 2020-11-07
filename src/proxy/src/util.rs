@@ -6,7 +6,6 @@ use async_std::{
     net::{SocketAddr, UdpSocket},
     task,
 };
-use flate2::{write::ZlibEncoder, Compression};
 use myutil::{err::*, *};
 use nix::sys::socket::{
     bind, sendto, setsockopt, socket, sockopt, AddressFamily, MsgFlags,
@@ -14,11 +13,11 @@ use nix::sys::socket::{
 };
 use serde::Serialize;
 use std::{
-    io::Write,
     os::unix::io::{FromRawFd, RawFd},
     time::Duration,
 };
 use ttserver_def::*;
+use ttutils::zlib;
 
 /// UAU(uau), Unix(Unix Domain Socket) Abstract Udp
 ///
@@ -112,7 +111,7 @@ pub(crate) fn gen_resp_err(uuid: u64, msg: &str) -> Resp {
     }
 }
 
-/// 回送信息至中枢
+/// 回送信息至'外发中枢'
 #[inline(always)]
 pub(crate) fn send_back(
     sock: RawFd,
@@ -121,11 +120,7 @@ pub(crate) fn send_back(
 ) -> Result<()> {
     serde_json::to_vec(&resp)
         .c(d!())
-        .and_then(|resp| {
-            let mut en = ZlibEncoder::new(vct![], Compression::default());
-            en.write_all(&resp[..]).c(d!())?;
-            en.finish().c(d!())
-        })
+        .and_then(|resp| zlib::encode(&resp[..]).c(d!()))
         .and_then(|resp_compressed| {
             sendto(sock, &resp_compressed, &peeraddr, MsgFlags::empty())
                 .c(d!())
@@ -142,11 +137,7 @@ pub(crate) fn send_out(
 ) -> Result<()> {
     serde_json::to_vec(&resp)
         .c(d!())
-        .and_then(|resp| {
-            let mut en = ZlibEncoder::new(vct![], Compression::default());
-            en.write_all(&resp[..]).c(d!())?;
-            en.finish().c(d!())
-        })
+        .and_then(|resp| zlib::encode(&resp[..]).c(d!()))
         .map(|resp_compressed| {
             task::spawn(async move {
                 info_omit!(sock.send_to(&resp_compressed, peeraddr).await);

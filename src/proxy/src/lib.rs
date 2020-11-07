@@ -18,17 +18,16 @@ use async_std::{
     task,
 };
 use def::Proxy;
-use flate2::write::ZlibDecoder;
 use lazy_static::lazy_static;
 use myutil::{err::*, *};
 use parking_lot::Mutex;
 use std::{
-    io::Write,
     os::unix::io::{IntoRawFd, RawFd},
     sync::mpsc::channel,
     thread,
 };
 use ttserver_def::*;
+use ttutils::zlib;
 
 lazy_static! {
     static ref CFG: &'static cfg::Cfg = pnk!(cfg::register_cfg(None));
@@ -67,10 +66,8 @@ fn start_middle_serv() {
         peeraddr: SocketAddr,
         slave_resp: Vec<u8>,
     ) -> Result<()> {
-        let mut d = ZlibDecoder::new(vct![]);
-        d.write_all(&slave_resp[..])
+        zlib::decode(&slave_resp[..])
             .c(d!())
-            .and_then(|_| d.finish().c(d!()))
             .and_then(|resp_decompressed| {
                 serde_json::from_slice::<Resp>(&resp_decompressed).c(d!())
             })
@@ -161,13 +158,15 @@ fn start_serv_udp() {
 
                 parse_ops_id(&buf[0..OPS_ID_LEN])
                     .c(d!())
-                    .map(|ops_id| {
-                        let recvd = buf[OPS_ID_LEN..size].to_vec();
+                    .and_then(|ops_id| {
+                        let recvd =
+                            zlib::decode(&buf[OPS_ID_LEN..size]).c(d!())?;
                         task::spawn(async move {
                             info_omit!(
                                 serv_it_udp(ops_id, recvd, peeraddr).await
                             );
                         });
+                        Ok(())
                     })
                     .unwrap_or_else(|e| p(e));
             }

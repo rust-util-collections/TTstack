@@ -3,12 +3,12 @@
 //!
 
 use crate::{def::*, POOL, SOCK};
-use flate2::{write::ZlibEncoder, Compression};
 use futures::executor::{ThreadPool, ThreadPoolBuilder};
 use futures_timer::Delay;
 use myutil::{err::*, *};
 use serde::Serialize;
-use std::{io::Write, net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, time::Duration};
+use ttutils::zlib;
 
 /// 生成异步框架底层的线程池
 pub(crate) fn gen_thread_pool(n: Option<u8>) -> Result<ThreadPool> {
@@ -61,16 +61,12 @@ pub(crate) fn gen_resp_err(uuid: u64, msg: &str) -> Resp {
     }
 }
 
-/// 回送信息
+/// 回送信息至请求方(Client/Proxy)
 #[inline(always)]
 pub(crate) fn send_back(resp: Resp, peeraddr: SocketAddr) -> Result<()> {
     serde_json::to_vec(&resp)
         .c(d!())
-        .and_then(|resp| {
-            let mut en = ZlibEncoder::new(Vec::new(), Compression::default());
-            en.write_all(&resp[..]).c(d!())?;
-            en.finish().c(d!())
-        })
+        .and_then(|resp| zlib::encode(&resp[..]).c(d!()))
         .map(|resp_compressed| {
             POOL.spawn_ok(async move {
                 info_omit!(SOCK.send_to(&resp_compressed, peeraddr));

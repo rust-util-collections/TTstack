@@ -23,17 +23,16 @@ pub mod env;
 pub mod status;
 
 use crate::CFG;
-use flate2::write::ZlibDecoder;
 use lazy_static::lazy_static;
 use myutil::{err::*, *};
 use serde::Serialize;
 use std::{
     collections::HashMap,
-    io::Write,
     net::{SocketAddr, UdpSocket},
     time::Duration,
 };
 pub(self) use ttserver_def::*;
+use ttutils::zlib;
 
 lazy_static! {
     static ref OPS_MAP: HashMap<&'static str, u8> = map! {
@@ -108,19 +107,19 @@ pub fn send_req<T: Serialize>(
     req: Req<T>,
     peeraddr: SocketAddr,
 ) -> Result<Resp> {
+    let mut req_bytes = serde_json::to_vec(&req)
+        .c(d!())
+        .and_then(|req| zlib::encode(&req[..]).c(d!()))?;
     let mut body =
         format!("{id:>0width$}", id = ops_id, width = OPS_ID_LEN).into_bytes();
-    body.append(&mut serde_json::to_vec(&req).c(d!())?);
+    body.append(&mut req_bytes);
 
     SOCK.send_to(&body, peeraddr).c(d!()).and_then(|_| {
-        // At most 64KB can be sent on UDP
+        // At most 64KB can be sent on UDP(inet/inet6)
         let mut buf = vct![0; 64 * 1024];
         let size = SOCK.recv(&mut buf).c(d!())?;
-
-        let mut d = ZlibDecoder::new(vct![]);
-        d.write_all(&buf[0..size])
+        zlib::decode(&buf[0..size])
             .c(d!())
-            .and_then(|_| d.finish().c(d!()))
             .and_then(|data| serde_json::from_slice(&data).c(d!()))
     })
 }
