@@ -1,8 +1,13 @@
 [package]
 name = "ttutils"
-version = "0.1.0"
+version = "0.2.11"
+
 authors = ["FanHui <hui.fan@mail.ru>"]
 edition = "2018"
+description = "Lightweight private cloud solution for SME scenarios."
+license = "MIT OR Apache-2.0"
+keywords = ["firecracker", "qemu", "kvm", "openstack", "k8s", "cloud"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 flate2 = "1.0"
