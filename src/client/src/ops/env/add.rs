@@ -29,7 +29,7 @@ pub struct EnvAdd<'a> {
     /// 是否禁止 VM 对外连网
     pub deny_outgoing: bool,
     /// VM uuid 是否随机化(唯一)
-    pub rnd_uuid: bool,
+    pub rand_uuid: bool,
 }
 ///////////////////////////////
 
@@ -76,7 +76,8 @@ impl<'a> From<EnvAdd<'a>> for ReqAddEnv {
             port_set: v.vm_port,
             dup_each: alt!(0 == v.dup_each, None, Some(v.dup_each)),
             deny_outgoing: v.deny_outgoing,
-            rnd_uuid: v.rnd_uuid,
+            rand_uuid: v.rand_uuid,
+            vmcfg: None,
         }
     }
 }

@@ -56,7 +56,6 @@ pub(super) fn init() -> Result<()> {
                 .c(d!())
         })
         .and_then(|_| cmd_exec("ip", &["link", "set", BRIDGE, "up"]).c(d!()))
-        .and_then(|_| zfs_clean().c(d!()))
         .map(|_| {
             (0..1000).for_each(|n| {
                 omit!(cmd_exec("ip", &["link", "del", &format!("TAP-{}", n)]));
@@ -67,27 +66,7 @@ pub(super) fn init() -> Result<()> {
 #[inline(always)]
 #[cfg(not(feature = "nft"))]
 pub(super) fn init() -> Result<()> {
-    zfs_clean().c(d!())
-}
-
-#[inline(always)]
-#[cfg(not(feature = "zfs"))]
-fn zfs_clean() -> Result<()> {
     Ok(())
-}
-
-#[inline(always)]
-#[cfg(feature = "zfs")]
-fn zfs_clean() -> Result<()> {
-    let arg = format!(
-        r"
-        for i in `zfs list -t all | grep -o '{}/clone_[0-9]\+'`; do
-            zfs destroy $i || exit 1;
-        done;
-    ",
-        *ZFS_ROOT
-    );
-    cmd_exec("sh", &["-c", &arg]).c(d!())
 }
 
 #[cfg(feature = "nft")]
@@ -110,7 +89,7 @@ pub(super) fn start(vm: &Vm) -> Result<()> {
     );
 
     let (disk, disk_device) = gen_disk_info(vm);
-    let uuid = if vm.rnd_uuid {
+    let uuid = if vm.rand_uuid {
         gen_vm_uuid().c(d!())?
     } else {
         "5ce41b72-0e2e-48f9-8422-7647b557aba8".to_owned()
@@ -223,7 +202,9 @@ pub(super) fn start(vm: &Vm) -> Result<()> {
 // for upper caller
 #[inline(always)]
 pub(crate) fn pre_starter(vm: &Vm) -> Result<()> {
-    create_img(vm).c(d!())?;
+    if !vm.image_cached {
+        create_img(vm).c(d!())?;
+    }
 
     #[cfg(feature = "nft")]
     create_tap(&format!("TAP-{}", vm.id)).c(d!())?;

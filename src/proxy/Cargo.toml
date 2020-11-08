@@ -1,6 +1,6 @@
 [package]
 name = "ttproxy"
-version = "0.2.11"
+version = "0.3.0"
 
 edition = "2018"
 authors = ["FanHui <fanhui.x@gmail.com>", "FanHui <hui.fan@mail.ru>"]

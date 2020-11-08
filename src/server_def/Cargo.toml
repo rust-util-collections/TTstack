@@ -1,6 +1,6 @@
 [package]
 name = "ttserver_def"
-version = "0.2.11"
+version = "0.3.0"
 
 edition = "2018"
 authors = ["FanHui <fanhui.x@gmail.com>", "FanHui <hui.fan@mail.ru>"]
@@ -12,3 +12,4 @@ categories = ["command-line-utilities"]
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 ttcore_def = { path = "../core_def" }
+myutil = { git = "https://gitee.com/kt10/myutil", branch = "master" }

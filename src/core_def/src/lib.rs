@@ -26,6 +26,7 @@ pub type EnvIdRef = str;
 
 /// 使用 Vm 的 MAC 地址的末尾两段的乘积, 最大值: 256 * 256
 pub type VmId = i32;
+/// process id
 pub type Pid = u32;
 
 /// VM 默认开放的端口(sshd)
@@ -161,4 +162,40 @@ pub struct VmInfo {
     pub ip: Ipv4,
     /// 用于 DNAT 的内外端口影射关系,
     pub port_map: HashMap<VmPort, PubPort>,
+}
+
+/// 调用方提供的参数, 用以创建 VM
+#[derive(Clone, Debug)]
+pub struct VmCfg {
+    /// 系统镜像路径
+    pub image_path: String,
+    /// 同一 Env 下所有 Vm 的内部端口都相同
+    pub port_list: Vec<VmPort>,
+    /// 虚拟实例的类型
+    pub kind: VmKind,
+    /// CPU 数量
+    pub cpu_num: Option<u32>,
+    /// 单位: MB
+    pub mem_size: Option<u32>,
+    /// 单位: MB
+    pub disk_size: Option<u32>,
+    /// VM uuid 随机化(唯一)
+    pub rand_uuid: bool,
+}
+
+/// 调用方提供的参数, 用以创建 VM, Proxy 专用
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct VmCfgProxy {
+    /// 完整的系统镜像名称
+    pub os: String,
+    /// 同一 Env 下所有 Vm 的内部端口都相同
+    pub port_list: Vec<VmPort>,
+    /// CPU 数量
+    pub cpu_num: Option<u32>,
+    /// 单位: MB
+    pub mem_size: Option<u32>,
+    /// 单位: MB
+    pub disk_size: Option<u32>,
+    /// VM uuid 随机化(唯一)
+    pub rand_uuid: bool,
 }

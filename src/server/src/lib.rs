@@ -10,13 +10,14 @@ pub mod cfg;
 mod def;
 mod hdr;
 mod init;
-pub mod util;
+mod util;
 
 use def::{DEFAULT_REQ_ID, OPS_ID_LEN};
 use futures::executor::ThreadPool;
 use lazy_static::lazy_static;
 use myutil::{err::*, *};
 use std::{
+    mem,
     net::{SocketAddr, UdpSocket},
     sync::Arc,
 };
@@ -25,13 +26,36 @@ use ttutils::zlib;
 lazy_static! {
     static ref POOL: ThreadPool = pnk!(util::gen_thread_pool(Some(8)));
     static ref CFG: &'static cfg::Cfg = pnk!(cfg::register_cfg(None));
-    static ref SERV: Arc<ttcore::Serv> = Arc::new(ttcore::Serv::new());
+    static ref SERV: Arc<ttcore::Serv> =
+        Arc::new(ttcore::Serv::new(&CFG.cfgdb_path));
     static ref SOCK: UdpSocket = pnk!(UdpSocket::bind(&CFG.serv_at).c(d!()));
 }
 
 /// 服务启动入口
 pub fn start(cfg: cfg::Cfg) -> Result<()> {
     pnk!(cfg::register_cfg(Some(cfg)));
+
+    // 载入先前已存在的 ENV 实例
+    for (cli, env_set) in SERV.cfg_db.read_all().c(d!())?.into_iter() {
+        for (vm_set, env) in env_set.into_iter().map(|mut env| {
+            (
+                mem::take(&mut env.vm)
+                    .into_iter()
+                    .map(|(_, vm_set)| vm_set)
+                    .collect(),
+                env,
+            )
+        }) {
+            env.load(&SERV)
+                .c(d!())
+                .and_then(|mut env| {
+                    env.add_vm_set_complex(vct![], vm_set, true)
+                        .c(d!())
+                        .map(|_| env)
+                })
+                .and_then(|env| SERV.register_env(cli.clone(), env).c(d!()))?;
+        }
+    }
 
     init::setenv()
         .c(d!())

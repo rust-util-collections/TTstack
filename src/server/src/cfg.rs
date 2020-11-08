@@ -22,6 +22,8 @@ pub struct Cfg {
     /// # FreeBSD
     /// 使用 ZFS 卷, 不需要写权限
     pub image_path: String,
+    /// Env Config 存放路径, 目前为 RocksDB 数据文件地址
+    pub cfgdb_path: String,
     /// CPU 核心总数
     pub cpu_total: u32,
     /// Mem 总容量, 单位: MB

@@ -103,7 +103,8 @@ fn t_add_env() {
         port_set: vct![],
         dup_each: None,
         deny_outgoing: false,
-        rnd_uuid: true,
+        rand_uuid: true,
+        vmcfg: None,
     };
 
     let resp = pnk!(send_req("add_env", Req::new(uuid, msg)));

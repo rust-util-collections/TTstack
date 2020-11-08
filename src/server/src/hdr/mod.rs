@@ -15,7 +15,7 @@ use std::{
     net::SocketAddr,
     ops::{Deref, DerefMut},
 };
-use ttcore::{vm_kind, Env, VmCfg};
+use ttcore::{vm_kind, Env};
 
 type Ops = fn(SocketAddr, Vec<u8>) -> Result<()>;
 include!("../../../server_def/src/included_ops_map.rs");
@@ -107,79 +107,63 @@ impl DerefMut for ReqAddEnvWrap {
 }
 
 impl ReqAddEnvWrap {
-    fn check_dup(&self) -> Result<u32> {
-        const DUP_MAX: u32 = 2000;
-        let dup_each = self.0.dup_each.unwrap_or(0);
-        if DUP_MAX < dup_each {
-            Err(eg!(format!(
-                "the number of `dup` too large: {}(max {})",
-                dup_each, DUP_MAX
-            )))
-        } else {
-            Ok(dup_each)
-        }
-    }
-
-    // 自动添加 SSH/ttrexec 端口影射
-    fn set_ssh_port(&mut self) {
-        self.0.port_set.push(SSH_PORT);
-        self.0.port_set.push(TTREXEC_PORT);
-        self.0.port_set.sort_unstable();
-        self.0.port_set.dedup();
-    }
-
-    fn set_os_lowercase(&mut self) {
-        self.0
-            .os_prefix
-            .iter_mut()
-            .for_each(|os| *os = os.to_lowercase());
-    }
-
     /// 根据请求参数生成 Env
     pub fn create_env(mut self) -> Result<Env> {
         self.set_ssh_port();
-        self.set_os_lowercase();
-        let me = &self;
-        let dup_each = self.check_dup().c(d!())?;
-        let mut env = Env::new(&SERV, &self.0.env_id).c(d!())?;
-        let vmset = server::OS_INFO
-            .read()
-            .iter()
-            .filter(|(os, _)| {
-                self.0.os_prefix.iter().any(|pre| os.starts_with(pre))
-            })
-            .map(|(os, img_path)| {
-                (0..(1 + dup_each)).map(move |_| VmCfg {
-                    image_path: img_path.to_owned(),
-                    port_list: me.0.port_set.clone(),
-                    kind: pnk!(vm_kind(os)),
-                    cpu_num: me.0.cpu_num,
-                    mem_size: me.0.mem_size,
-                    disk_size: me.0.disk_size,
-                    rnd_uuid: me.0.rnd_uuid,
+        let vmset = if let Some(vc) = self.vmcfg.take() {
+            let mut res = vct![];
+            let os_info = server::OS_INFO.read();
+            for i in vc.into_iter() {
+                res.push(VmCfg {
+                    image_path: os_info
+                        .get(&i.os)
+                        .ok_or(eg!())
+                        .c(d!())?
+                        .to_owned(),
+                    port_list: i.port_list,
+                    kind: pnk!(vm_kind(&i.os)),
+                    cpu_num: i.cpu_num,
+                    mem_size: i.mem_size,
+                    disk_size: i.disk_size,
+                    rand_uuid: i.rand_uuid,
+                });
+            }
+            res
+        } else {
+            self.set_os_lowercase();
+            let me = &self;
+            let dup_each = self.check_dup().c(d!())?;
+            server::OS_INFO
+                .read()
+                .iter()
+                .filter(|(os, _)| {
+                    self.os_prefix.iter().any(|pre| os.starts_with(pre))
                 })
-            })
-            .flatten()
-            .collect::<Vec<_>>();
+                .map(|(os, img_path)| {
+                    (0..(1 + dup_each)).map(move |_| VmCfg {
+                        image_path: img_path.to_owned(),
+                        port_list: me.port_set.clone(),
+                        kind: pnk!(vm_kind(os)),
+                        cpu_num: me.cpu_num,
+                        mem_size: me.mem_size,
+                        disk_size: me.disk_size,
+                        rand_uuid: me.rand_uuid,
+                    })
+                })
+                .flatten()
+                .collect::<Vec<_>>()
+        };
 
         if vmset.is_empty() {
             return Err(eg!("Nothing matches your OS-prefix[s] !"));
         }
 
-        env.update_life(self.0.life_time.unwrap_or(3600), false)
+        let mut env = Env::new(&SERV, &self.env_id).c(d!())?;
+        env.update_life(self.life_time.unwrap_or(3600), false)
             .c(d!())?;
-        env.add_vm_set(vmset).c(d!())?;
 
-        if self.deny_outgoing {
-            env.update_hardware(
-                None,
-                None,
-                None,
-                &[],
-                Some(self.deny_outgoing),
-            )
-            .c(d!())?;
-        }
+        env.outgoing_denied = self.deny_outgoing;
+        env.add_vm_set(vmset).c(d!())?;
 
         Ok(env)
     }

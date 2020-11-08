@@ -2,6 +2,7 @@
 //! # 基本类型定义
 //!
 
+use myutil::{err::*, *};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 pub use ttcore_def::*;
@@ -126,15 +127,53 @@ pub type RespGetEnvInfo = Vec<EnvInfo>;
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct ReqAddEnv {
     pub env_id: EnvId,
-    pub os_prefix: Vec<String>,
     pub life_time: Option<u64>,
+    pub dup_each: Option<u32>,
+    pub deny_outgoing: bool,
+
+    /// 若此项为不空,
+    /// 则优先使用此项的信息
+    pub vmcfg: Option<Vec<VmCfgProxy>>,
+
+    /// 若vmcfg字段为空值,
+    /// 使用这些字段从头解析
+    pub os_prefix: Vec<String>,
     pub cpu_num: Option<u32>,
     pub mem_size: Option<u32>,
     pub disk_size: Option<u32>,
     pub port_set: Vec<Port>,
-    pub dup_each: Option<u32>,
-    pub deny_outgoing: bool,
-    pub rnd_uuid: bool,
+    pub rand_uuid: bool,
+}
+
+impl ReqAddEnv {
+    /// 自动添加 SSH/ttrexec 端口影射
+    pub fn set_ssh_port(&mut self) {
+        self.port_set.push(SSH_PORT);
+        self.port_set.push(TTREXEC_PORT);
+        self.port_set.sort_unstable();
+        self.port_set.dedup();
+    }
+
+    /// OS 前缀匹配不区分大小写
+    pub fn set_os_lowercase(&mut self) {
+        self.os_prefix
+            .iter_mut()
+            .for_each(|os| *os = os.to_lowercase());
+    }
+
+    /// 检查 dup 的数量是否超限
+    pub fn check_dup(&self) -> Result<u32> {
+        const DUP_MAX: u32 = 500;
+        let dup_each = self.dup_each.unwrap_or(0);
+        if DUP_MAX < dup_each {
+            Err(eg!(format!(
+                "the number of `dup` too large: {}(max {})",
+                dup_each, DUP_MAX
+            )))
+        } else {
+            Ok(dup_each)
+        }
+    }
 }
 
 /// 公开给 Cli 使用

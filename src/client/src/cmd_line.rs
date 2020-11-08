@@ -234,7 +234,7 @@ fn env_add<'a>(m: &'a ArgMatches<'a>) -> Result<EnvAdd<'a>> {
             disk_size: option_num_parse!(disk_size, 0, u32),
             dup_each: option_num_parse!(dup_each, 0, u32),
             deny_outgoing: m.is_present("deny-outgoing"),
-            rnd_uuid: !m.is_present("same-uuid"),
+            rand_uuid: !m.is_present("same-uuid"),
         }),
         _ => Err(eg!()),
     }

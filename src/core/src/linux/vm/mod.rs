@@ -45,7 +45,9 @@ pub(crate) fn post_clean(vm: &Vm) {
     info_omit!(cgroup::kill_vm(vm.id));
 
     // 清理为 Vm 创建的临时 image
-    info_omit!(engine::remove_image(vm));
+    if !vm.image_cached {
+        info_omit!(engine::remove_image(vm));
+    }
 
     // 清理为 Vm 创建的 TAP 设备
     #[cfg(feature = "nft")]
