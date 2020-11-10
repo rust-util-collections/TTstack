@@ -39,7 +39,7 @@ pub(super) fn test() {
     assert_eq!(orig_server_info.cpu_total, new_server_info.cpu_total);
     assert_eq!(
         new_server_info.cpu_used,
-        new_server_info.supported_list.len() as u32
+        new_server_info.supported_list.len() as i32
     );
 
     let env_list = get_env_list();
@@ -198,7 +198,11 @@ fn get_env_info(env_id: &str) -> Result<RespGetEnvInfo> {
                 new.into_iter().for_each(|n| {
                     if let Some(env) = base.get_mut(&n.id) {
                         n.vm.into_iter().for_each(|(k, v)| {
-                            env.vm.insert(k, v);
+                            // 多台 Slave 之间的 VmId 会有重复,
+                            // 差重复的 VmId * 1000 后再存回去
+                            if let Some(exist) = env.vm.insert(k, v) {
+                                env.vm.insert(1000 * k, exist);
+                            }
                         });
                     } else {
                         base.insert(n.id.clone(), n);
@@ -213,7 +217,7 @@ fn get_env_info(env_id: &str) -> Result<RespGetEnvInfo> {
     }
 }
 
-fn add_env(env_id: &str, os_prefix: &[&str], cpu_num: u32) -> Resp {
+fn add_env(env_id: &str, os_prefix: &[&str], cpu_num: i32) -> Resp {
     let uuid = 5569;
     let msg = ReqAddEnv {
         env_id: env_id.to_owned(),

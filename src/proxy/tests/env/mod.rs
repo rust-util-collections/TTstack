@@ -4,6 +4,7 @@ use nix::unistd::{fork, getuid, ForkResult};
 use serde::Serialize;
 use std::{
     collections::HashMap,
+    fs,
     net::{SocketAddr, UdpSocket},
     process, thread,
     time::Duration,
@@ -13,9 +14,9 @@ use ttserver::cfg::Cfg as SlaveCfg;
 use ttserver_def::*;
 use ttutils::zlib;
 
-pub(super) const CPU_TOTAL: u32 = 48;
-pub(super) const MEM_TOTAL: u32 = 64 * 1024;
-pub(super) const DISK_TOTAL: u32 = 1000 * 1024;
+pub(super) const CPU_TOTAL: i32 = 48;
+pub(super) const MEM_TOTAL: i32 = 64 * 1024;
+pub(super) const DISK_TOTAL: i32 = 1000 * 1024;
 
 const IP_TEST: &str = "127.0.0.1";
 
@@ -76,6 +77,12 @@ fn mock_cfg() -> (Cfg, SlaveCfg, SlaveCfg) {
     let s1 = [IP_TEST, ":29527"].concat();
     let s2 = [IP_TEST, ":39527"].concat();
 
+    let cfgdb_path1 = format!("/tmp/{}", ts!());
+    pnk!(fs::create_dir_all(&cfgdb_path1));
+
+    let cfgdb_path2 = format!("/tmp/{}", 2 * ts!());
+    pnk!(fs::create_dir_all(&cfgdb_path2));
+
     (
         Cfg {
             proxy_serv_at: PROXY_ADDR.to_owned(),
@@ -90,7 +97,7 @@ fn mock_cfg() -> (Cfg, SlaveCfg, SlaveCfg) {
             serv_ip: IP_TEST.to_owned(),
             serv_at: s1,
             image_path: "/mnt/".to_owned(),
-            cfgdb_path: "/mnt/".to_owned(),
+            cfgdb_path: cfgdb_path1,
             cpu_total: CPU_TOTAL,
             mem_total: MEM_TOTAL,
             disk_total: DISK_TOTAL,
@@ -100,7 +107,7 @@ fn mock_cfg() -> (Cfg, SlaveCfg, SlaveCfg) {
             serv_ip: IP_TEST.to_owned(),
             serv_at: s2,
             image_path: "/mnt/".to_owned(),
-            cfgdb_path: "/mnt/".to_owned(),
+            cfgdb_path: cfgdb_path2,
             cpu_total: CPU_TOTAL,
             mem_total: MEM_TOTAL,
             disk_total: DISK_TOTAL,

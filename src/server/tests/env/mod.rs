@@ -4,6 +4,7 @@ use nix::unistd::getuid;
 use serde::Serialize;
 use std::{
     collections::HashMap,
+    fs,
     net::{SocketAddr, UdpSocket},
     thread,
     time::Duration,
@@ -12,9 +13,9 @@ use ttserver::cfg::Cfg;
 use ttserver_def::*;
 use ttutils::zlib;
 
-pub(super) const CPU_TOTAL: u32 = 48;
-pub(super) const MEM_TOTAL: u32 = 64 * 1024;
-pub(super) const DISK_TOTAL: u32 = 1000 * 1024;
+pub(super) const CPU_TOTAL: i32 = 48;
+pub(super) const MEM_TOTAL: i32 = 64 * 1024;
+pub(super) const DISK_TOTAL: i32 = 1000 * 1024;
 
 lazy_static! {
     static ref CLI_SOCK: UdpSocket = pnk!(gen_sock(1));
@@ -52,12 +53,14 @@ pub(super) fn start_server() {
 }
 
 fn mock_cfg() -> Cfg {
+    let cfgdb_path = format!("/tmp/{}", ts!());
+    pnk!(fs::create_dir_all(&cfgdb_path));
     Cfg {
         log_path: None,
         serv_ip: "127.0.0.1".to_owned(),
         serv_at: "127.0.0.1:9527".to_owned(),
         image_path: "/mnt/".to_owned(),
-        cfgdb_path: "/mnt/".to_owned(),
+        cfgdb_path,
         cpu_total: CPU_TOTAL,
         mem_total: MEM_TOTAL,
         disk_total: DISK_TOTAL,

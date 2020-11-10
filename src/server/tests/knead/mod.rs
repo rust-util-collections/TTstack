@@ -39,7 +39,7 @@ pub(super) fn test() {
     assert_eq!(orig_server_info.cpu_total, new_server_info.cpu_total);
     assert_eq!(
         new_server_info.cpu_used,
-        new_server_info.supported_list.len() as u32
+        new_server_info.supported_list.len() as i32
     );
 
     let env_list = get_env_list();
@@ -172,7 +172,7 @@ fn get_env_info(env_id: &str) -> Result<RespGetEnvInfo> {
     }
 }
 
-fn add_env(env_id: &str, os_prefix: &[&str], cpu_num: u32) -> Resp {
+fn add_env(env_id: &str, os_prefix: &[&str], cpu_num: i32) -> Resp {
     let uuid = 5566;
     let msg = ReqAddEnv {
         env_id: env_id.to_owned(),
