@@ -5,10 +5,7 @@
 //!
 
 use super::*;
-use std::{
-    collections::{HashMap, HashSet},
-    mem,
-};
+use std::{collections::HashSet, mem};
 
 #[derive(Clone, Debug, Deserialize)]
 struct MyReq {
@@ -39,14 +36,14 @@ pub(super) fn add_env(
             let supported_set = mem::take(&mut v.supported_list)
                 .into_iter()
                 .collect::<HashSet<_>>();
-            (k, (v, vct![], supported_set))
+            (k, v, vct![], supported_set)
         })
-        .collect::<HashMap<_, _>>();
+        .collect::<Vec<_>>();
 
     req.msg.set_os_lowercase();
     let me = &req.msg;
     let dup_each = me.check_dup().c(d!())?;
-    let rsc_set = slave_info
+    let rsc_wanted = slave_info
         .into_iter()
         .map(|(_, i)| i.supported_list.into_iter())
         .flatten()
@@ -68,33 +65,33 @@ pub(super) fn add_env(
     let cpu_need = me.cpu_num.unwrap_or(CPU_DEFAULT);
     let mem_need = me.mem_size.unwrap_or(MEM_DEFAULT);
     let disk_need = me.disk_size.unwrap_or(DISK_DEFAULT);
-    'x: for r in rsc_set {
-        for i in resource_pool.values_mut() {
-            if i.2.contains(&r.os)
-                && i.0.cpu_total - i.0.cpu_used >= cpu_need
-                && i.0.mem_total - i.0.mem_used >= mem_need
-                && i.0.disk_total - i.0.disk_used >= disk_need
+    'x: for w in rsc_wanted {
+        resource_pool.sort_by_key(|s| s.1.mem_used - s.1.mem_total);
+        for i in resource_pool.iter_mut() {
+            if i.3.contains(&w.os)
+                && i.1.cpu_total - i.1.cpu_used >= cpu_need
+                && i.1.mem_total - i.1.mem_used >= mem_need
+                && i.1.disk_total - i.1.disk_used >= disk_need
             {
-                i.0.cpu_used += cpu_need;
-                i.0.mem_used += mem_need;
-                i.0.disk_used += disk_need;
-                i.1.push(r);
+                i.1.cpu_used += cpu_need;
+                i.1.mem_used += mem_need;
+                i.1.disk_used += disk_need;
+                i.2.push(w);
                 continue 'x;
             }
         }
 
-        send_err!(
+        return send_err!(
             req.uuid,
             eg!("Server has not enough resources to meet your needs!"),
             peeraddr
-        )?;
-        return Ok(());
+        );
     }
 
     // 任务分配完成, 执行分发
     let jobs = resource_pool
         .into_iter()
-        .map(|(k, v)| (k, v.1))
+        .map(|(sa, _, v, _)| (sa, v))
         .filter(|(_, v)| !v.is_empty())
         .collect::<Vec<_>>();
     send_req(ops_id, req, peeraddr, jobs).c(d!())

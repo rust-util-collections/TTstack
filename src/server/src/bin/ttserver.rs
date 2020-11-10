@@ -49,9 +49,9 @@ fn parse_cfg() -> Result<Cfg> {
             log_path: log_path.map(|lp| lp.to_owned()),
             image_path: check_image_path(img_path).c(d!())?.to_owned(),
             cfgdb_path: cfgdb_path.to_owned(),
-            cpu_total: cpu.parse::<u32>().c(d!())?,
-            mem_total: mem.parse::<u32>().c(d!())?,
-            disk_total: disk.parse::<u32>().c(d!())?,
+            cpu_total: cpu.parse::<i32>().c(d!())?,
+            mem_total: mem.parse::<i32>().c(d!())?,
+            disk_total: disk.parse::<i32>().c(d!())?,
         }),
         (addr, _, _, img_path, cfgdb_path, cpu, mem, disk) => {
             let msg = format!(

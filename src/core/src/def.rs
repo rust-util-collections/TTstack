@@ -27,6 +27,8 @@ const MIN_START_STOP_ITV: u64 = 20;
 // 未分配 VmId 前的预置值
 const VM_PRESET_ID: i32 = -1;
 
+const FUCK: &str = "The fucking world is over !!!";
+
 /// eg: "QEMU:CentOS-7.2:default"
 pub type OsName = String;
 /// eg: "/dev/zvol/zroot/tt/QEMU:CentOS-7.2:default"
@@ -322,7 +324,7 @@ impl Serv {
         &self,
         cli_id: &CliIdRef,
         env_id: &EnvIdRef,
-        cpu_mem_disk: (Option<u32>, Option<u32>, Option<u32>),
+        cpu_mem_disk: (Option<i32>, Option<i32>, Option<i32>),
         vm_port: &[Port],
         deny_outgoing: Option<bool>,
     ) -> Result<()> {
@@ -349,30 +351,30 @@ impl Serv {
 }
 
 /// 已分配的资源信息,
-/// `*_used` 字段使用 u32 类型,
+/// `*_used` 字段使用 i32 类型,
 /// 防止统计数据时的加和运算溢出
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Resource {
     /// Vm 数量
-    pub vm_active: u32,
+    pub vm_active: i32,
     /// Cpu 核心数
-    pub cpu_total: u64,
+    pub cpu_total: i32,
     /// 已使用的 Cpu
-    pub cpu_used: u32,
+    pub cpu_used: i32,
     /// 内存容量(MB)
-    pub mem_total: u64,
+    pub mem_total: i32,
     /// 已使用的内存(MB)
-    pub mem_used: u32,
+    pub mem_used: i32,
     /// 磁盘容量(MB)
-    pub disk_total: u64,
+    pub disk_total: i32,
     /// 已使用的磁盘(MB)
-    pub disk_used: u32,
+    pub disk_used: i32,
 }
 
 impl Resource {
     /// 设置资源限制时使用
     #[inline(always)]
-    pub fn new(cpu_total: u64, mem_total: u64, disk_total: u64) -> Resource {
+    pub fn new(cpu_total: i32, mem_total: i32, disk_total: i32) -> Resource {
         let mut rsc = Resource::default();
         rsc.cpu_total = cpu_total;
         rsc.mem_total = mem_total;
@@ -491,9 +493,9 @@ impl Env {
     #[inline(always)]
     pub fn update_hardware(
         &mut self,
-        cpu_num: Option<u32>,
-        mem_size: Option<u32>,
-        disk_size: Option<u32>,
+        cpu_num: Option<i32>,
+        mem_size: Option<i32>,
+        disk_size: Option<i32>,
         vm_port: &[Port],
         deny_outgoing: Option<bool>,
     ) -> Result<()> {
@@ -561,7 +563,7 @@ impl Env {
                         .and_then(|_| nat::set_rule(vm).c(d!()))?;
                 }
             } else {
-                return Err(eg!("The fucking world is over!"));
+                return Err(eg!(FUCK));
             }
         }
 
@@ -679,74 +681,103 @@ impl Env {
         Ok(())
     }
 
-    // 检查可用资源是否充裕,
-    // check 过程中将 u32 转换为 u64 进行计算, 避免溢出
+    // 检查可用资源是否充裕
     fn check_resource(&self, cfg_set: &[VmCfg]) -> Result<()> {
         if let Some(s) = self.serv_belong_to.upgrade() {
-            let rsc;
-            {
-                rsc = *s.resource.read();
-            }
+            let rsc = *s.resource.read();
+
+            let (cpu, mem, disk) = cfg_set.iter().fold(
+                (Some(0i32), Some(0i32), Some(0i32)),
+                |b, vm| {
+                    (
+                        b.0.map(|i| {
+                            i.checked_add(vm.cpu_num.unwrap_or(CPU_DEFAULT))
+                        })
+                        .flatten(),
+                        b.1.map(|i| {
+                            i.checked_add(vm.mem_size.unwrap_or(MEM_DEFAULT))
+                        })
+                        .flatten(),
+                        b.2.map(|i| {
+                            i.checked_add(vm.disk_size.unwrap_or(DISK_DEFAULT))
+                        })
+                        .flatten(),
+                    )
+                },
+            );
 
             let (cpu, mem, disk) =
-                cfg_set.iter().fold((0u64, 0, 0), |mut b, vm| {
-                    b.0 += vm.cpu_num.unwrap_or(CPU_DEFAULT) as u64;
-                    b.1 += vm.mem_size.unwrap_or(MEM_DEFAULT) as u64;
-                    b.2 += vm.disk_size.unwrap_or(DISK_DEFAULT) as u64;
-                    b
-                });
+                if let (Some(c), Some(m), Some(d)) = (cpu, mem, disk) {
+                    (c, m, d)
+                } else {
+                    return Err(eg!(FUCK));
+                };
 
-            if rsc.cpu_used as u64 + cpu > rsc.cpu_total {
+            if rsc.cpu_used.checked_add(cpu).ok_or(eg!(FUCK))? > rsc.cpu_total
+            {
                 return Err(eg!(format!(
                     "CPU resource busy: total {}, used {}, you want: {}",
                     rsc.cpu_total, rsc.cpu_used, cpu
                 )));
             }
 
-            if rsc.mem_used as u64 + mem > rsc.mem_total {
+            if rsc.mem_used.checked_add(mem).ok_or(eg!(FUCK))? > rsc.mem_total
+            {
                 return Err(eg!(format!(
                     "Memory resource busy: total {} MB, used {} MB, you want: {} MB",
                     rsc.mem_total, rsc.mem_used, mem
                 )));
             }
 
-            if rsc.disk_used as u64 + disk > rsc.disk_total {
+            if rsc.disk_used.checked_add(disk).ok_or(eg!(FUCK))?
+                > rsc.disk_total
+            {
                 return Err(eg!(format!(
                     "Disk resource busy: total {} MB, used {} MB, you want: {} MB",
                     rsc.disk_total, rsc.disk_used, disk
                 )));
             }
         } else {
-            return Err(eg!("The fucking world is OVER!"));
+            return Err(eg!(FUCK));
         }
 
         Ok(())
     }
 
-    // 检查可用资源是否充裕,
-    // check 过程中将 u32 转换为 u64 进行计算, 避免溢出
+    // 检查可用资源是否充裕
     // - @cfg: (cpu_num, mem_size, disk_size)
-    fn check_resource_and_set(&self, cfg: (u32, u32, u32)) -> Result<()> {
+    fn check_resource_and_set(&self, cfg: (i32, i32, i32)) -> Result<()> {
         if let Some(s) = self.serv_belong_to.upgrade() {
             let rsc = { *s.resource.read() };
-            let vm_num = self.vm.len() as u64;
+            let vm_num = self.vm.len() as i32;
 
             let (cpu, mem, disk) =
-                self.vm.values().fold((0u64, 0, 0), |mut b, vm| {
-                    b.0 += vm.cpu_num as u64;
-                    b.1 += vm.mem_size as u64;
-                    b.2 += vm.disk_size as u64;
+                self.vm.values().fold((0, 0, 0), |mut b, vm| {
+                    b.0 += vm.cpu_num;
+                    b.1 += vm.mem_size;
+                    b.2 += vm.disk_size;
                     b
                 });
 
-            let (cpu_new, mem_new, disk_new) = (
-                cfg.0 as u64 * vm_num,
-                cfg.1 as u64 * vm_num,
-                cfg.2 as u64 * vm_num,
-            );
+            let (cpu_new, mem_new, disk_new) =
+                if let (Some(c), Some(m), Some(d)) = (
+                    cfg.0.checked_mul(vm_num),
+                    cfg.1.checked_mul(vm_num),
+                    cfg.2.checked_mul(vm_num),
+                ) {
+                    (c, m, d)
+                } else {
+                    return Err(eg!(FUCK));
+                };
 
             if cpu_new > cpu
-                && rsc.cpu_used as u64 + cpu_new - cpu > rsc.cpu_total
+                && rsc
+                    .cpu_used
+                    .checked_add(cpu_new)
+                    .map(|i| i.checked_sub(cpu))
+                    .flatten()
+                    .ok_or(eg!(FUCK))?
+                    > rsc.cpu_total
             {
                 return Err(eg!(format!(
                     "CPU resource busy: total {}, used {}, you want: {}",
@@ -755,7 +786,13 @@ impl Env {
             }
 
             if mem_new > mem
-                && rsc.mem_used as u64 + mem_new - mem > rsc.mem_total
+                && rsc
+                    .mem_used
+                    .checked_add(mem_new)
+                    .map(|i| i.checked_sub(mem))
+                    .flatten()
+                    .ok_or(eg!(FUCK))?
+                    > rsc.mem_total
             {
                 return Err(eg!(format!(
                     "Memory resource busy: total {} MB, used {} MB, you want: {} MB",
@@ -764,7 +801,13 @@ impl Env {
             }
 
             if disk_new > disk
-                && rsc.disk_used as u64 + disk_new - disk > rsc.disk_total
+                && rsc
+                    .disk_used
+                    .checked_add(disk_new)
+                    .map(|i| i.checked_sub(disk))
+                    .flatten()
+                    .ok_or(eg!(FUCK))?
+                    > rsc.disk_total
             {
                 return Err(eg!(format!(
                     "Disk resource busy: total {} MB, used {} MB, you want: {} MB",
@@ -774,14 +817,11 @@ impl Env {
 
             // 确认无误后设置生效
             let mut r = s.resource.write();
-            r.cpu_used =
-                r.cpu_used + (cpu_new / vm_num) as u32 - (cpu / vm_num) as u32;
-            r.mem_used =
-                r.mem_used + (mem_new / vm_num) as u32 - (mem / vm_num) as u32;
-            r.disk_used = r.disk_used + (disk_new / vm_num) as u32
-                - (disk / vm_num) as u32;
+            r.cpu_used = r.cpu_used + (cpu_new / vm_num) - (cpu / vm_num);
+            r.mem_used = r.mem_used + (mem_new / vm_num) - (mem / vm_num);
+            r.disk_used = r.disk_used + (disk_new / vm_num) - (disk / vm_num);
         } else {
-            return Err(eg!("The fucking world is OVER!"));
+            return Err(eg!(FUCK));
         }
 
         Ok(())
@@ -811,11 +851,11 @@ pub struct Vm {
     /// 虚拟实例的类型
     pub kind: VmKind,
     /// CPU 数量
-    pub cpu_num: u32,
+    pub cpu_num: i32,
     /// 单位: MB
-    pub mem_size: u32,
+    pub mem_size: i32,
     /// 单位: MB
-    pub disk_size: u32,
+    pub disk_size: i32,
 
     // 所属的 Serv 实例
     #[serde(skip)]
@@ -964,7 +1004,7 @@ impl Vm {
                     }
                     cnter += 1;
                     if VM_ID_LIMIT < cnter {
-                        return Err(eg!("The fucking world is over!!!"));
+                        return Err(eg!(FUCK));
                     }
                 }
             } else if vmid_inuse.get(&self.id).is_none() {
@@ -973,7 +1013,7 @@ impl Vm {
                 self.id
             } else {
                 // 服务初始化时存在重复的 VmId, 视为严重错误
-                return Err(eg!("The fucking world is over!!!"));
+                return Err(eg!(FUCK));
             }
         };
 
@@ -1003,7 +1043,7 @@ impl Vm {
                 .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |x| {
                     Some(PUB_PORT_BASE + (1 + x) % PUB_PORT_LIMIT)
                 })
-                .map_err(|_| eg!(d!("The fucking world is over!!")))
+                .map_err(|_| eg!(FUCK))
                 .c(d!())?;
             if port_inuse.get(&port).is_none() {
                 port_inuse.insert(port);
@@ -1013,7 +1053,7 @@ impl Vm {
 
             cnter += 1;
             if PUB_PORT_LIMIT < cnter {
-                return Err(eg!("The fucking world is over!!!"));
+                return Err(eg!(FUCK));
             }
         }
 

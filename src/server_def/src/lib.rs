@@ -99,13 +99,13 @@ impl fmt::Display for Resp {
     PartialOrd,
 )]
 pub struct RespGetServerInfo {
-    pub vm_total: u32,
-    pub cpu_total: u32,
-    pub cpu_used: u32,
-    pub mem_total: u32,
-    pub mem_used: u32,
-    pub disk_total: u32,
-    pub disk_used: u32,
+    pub vm_total: i32,
+    pub cpu_total: i32,
+    pub cpu_used: i32,
+    pub mem_total: i32,
+    pub mem_used: i32,
+    pub disk_total: i32,
+    pub disk_used: i32,
     pub supported_list: Vec<String>,
 }
 
@@ -138,9 +138,9 @@ pub struct ReqAddEnv {
     /// 若vmcfg字段为空值,
     /// 使用这些字段从头解析
     pub os_prefix: Vec<String>,
-    pub cpu_num: Option<u32>,
-    pub mem_size: Option<u32>,
-    pub disk_size: Option<u32>,
+    pub cpu_num: Option<i32>,
+    pub mem_size: Option<i32>,
+    pub disk_size: Option<i32>,
     pub port_set: Vec<Port>,
     pub rand_uuid: bool,
 }
@@ -212,9 +212,9 @@ pub struct ReqUpdateEnvLife {
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct ReqUpdateEnvResource {
     pub env_id: EnvId,
-    pub cpu_num: Option<u32>,
-    pub mem_size: Option<u32>,
-    pub disk_size: Option<u32>,
+    pub cpu_num: Option<i32>,
+    pub mem_size: Option<i32>,
+    pub disk_size: Option<i32>,
     pub vm_port: Vec<u16>,
     pub deny_outgoing: Option<bool>,
 }

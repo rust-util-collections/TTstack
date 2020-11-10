@@ -16,7 +16,7 @@ use std::{collections::HashSet, mem, time};
 pub struct EnvUpdate<'a> {
     pub env_set: Vec<&'a EnvIdRef>,
     pub cpu_num: Option<u8>,
-    pub mem_size: Option<u32>,
+    pub mem_size: Option<u16>,
     pub vm_port: Vec<u16>,
     /// for kick-vm
     pub kick_dead: bool,
@@ -71,8 +71,8 @@ impl<'a> EnvUpdate<'a> {
                                 ops_id,
                                 gen_req(ReqUpdateEnvResource {
                                     env_id: env.to_string(),
-                                    cpu_num: self.cpu_num.map(|n| n as u32),
-                                    mem_size: self.mem_size,
+                                    cpu_num: self.cpu_num.map(|n| n as i32),
+                                    mem_size: self.mem_size.map(|i| i as i32),
                                     disk_size: None,
                                     vm_port: self.vm_port.clone(),
                                     deny_outgoing: self.deny_outgoing,

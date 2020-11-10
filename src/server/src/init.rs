@@ -20,9 +20,9 @@ pub(super) fn setenv() -> Result<()> {
 ///  设置可用的资源上限
 fn set_total_resource() {
     SERV.set_resource(ttcore::Resource::new(
-        CFG.cpu_total.into(),
-        CFG.mem_total.into(),
-        CFG.disk_total.into(),
+        CFG.cpu_total,
+        CFG.mem_total,
+        CFG.disk_total,
     ));
 }
 

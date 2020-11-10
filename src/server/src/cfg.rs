@@ -21,11 +21,11 @@ pub struct Cfg {
     /// Env Config 存放路径
     pub cfgdb_path: String,
     /// CPU 核心总数
-    pub cpu_total: u32,
+    pub cpu_total: i32,
     /// Mem 总容量, 单位: MB
-    pub mem_total: u32,
+    pub mem_total: i32,
     /// Disk 总容量, 单位: MB
-    pub disk_total: u32,
+    pub disk_total: i32,
 }
 
 pub(crate) fn register_cfg(cfg: Option<Cfg>) -> Option<&'static Cfg> {

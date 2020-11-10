@@ -9,11 +9,11 @@ use std::{
 };
 
 /// VM CPU 默认数量
-pub const CPU_DEFAULT: u32 = 2;
+pub const CPU_DEFAULT: i32 = 2;
 /// VM MEM 默认容量, 单位: MB
-pub const MEM_DEFAULT: u32 = 1024;
+pub const MEM_DEFAULT: i32 = 1024;
 /// VM DISK 默认容量, 单位: MB
-pub const DISK_DEFAULT: u32 = 40 * 1024;
+pub const DISK_DEFAULT: i32 = 40 * 1024;
 
 /// Cli ID
 pub type CliId = String;
@@ -150,11 +150,11 @@ pub struct VmInfo {
     /// 系统名称
     pub os: String,
     /// CPU 数量
-    pub cpu_num: u32,
+    pub cpu_num: i32,
     /// 单位: MB
-    pub mem_size: u32,
+    pub mem_size: i32,
     /// 单位: MB
-    pub disk_size: u32,
+    pub disk_size: i32,
     /// Vm IP 由 VmId 决定, 使用'10.10.x.x/8'网段
     pub ip: Ipv4,
     /// 用于 DNAT 的内外端口影射关系,
@@ -171,11 +171,11 @@ pub struct VmCfg {
     /// 虚拟实例的类型
     pub kind: VmKind,
     /// CPU 数量
-    pub cpu_num: Option<u32>,
+    pub cpu_num: Option<i32>,
     /// 单位: MB
-    pub mem_size: Option<u32>,
+    pub mem_size: Option<i32>,
     /// 单位: MB
-    pub disk_size: Option<u32>,
+    pub disk_size: Option<i32>,
     /// VM uuid 随机化(唯一)
     pub rand_uuid: bool,
 }
@@ -188,11 +188,11 @@ pub struct VmCfgProxy {
     /// 同一 Env 下所有 Vm 的内部端口都相同
     pub port_list: Vec<VmPort>,
     /// CPU 数量
-    pub cpu_num: Option<u32>,
+    pub cpu_num: Option<i32>,
     /// 单位: MB
-    pub mem_size: Option<u32>,
+    pub mem_size: Option<i32>,
     /// 单位: MB
-    pub disk_size: Option<u32>,
+    pub disk_size: Option<i32>,
     /// VM uuid 随机化(唯一)
     pub rand_uuid: bool,
 }

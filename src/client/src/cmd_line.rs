@@ -229,10 +229,10 @@ fn env_add<'a>(m: &'a ArgMatches<'a>) -> Result<EnvAdd<'a>> {
                 port_set
             },
             life_time: option_num_parse!(life_time, 0, u64),
-            cpu_num: option_num_parse!(cpu_num, 0, u32),
-            mem_size: option_num_parse!(mem_size, 0, u32),
+            cpu_num: option_num_parse!(cpu_num, 0, u8),
+            mem_size: option_num_parse!(mem_size, 0, u16),
             disk_size: option_num_parse!(disk_size, 0, u32),
-            dup_each: option_num_parse!(dup_each, 0, u32),
+            dup_each: option_num_parse!(dup_each, 0, u16),
             deny_outgoing: m.is_present("deny-outgoing"),
             rand_uuid: !m.is_present("same-uuid"),
         }),
@@ -325,7 +325,7 @@ fn env_update<'a>(m: &'a ArgMatches<'a>) -> Result<EnvUpdate<'a>> {
                 None
             },
             mem_size: if let Some(n) = mem_size {
-                Some(n.parse::<u32>().c(d!(not_num!(n)))?)
+                Some(n.parse::<u16>().c(d!(not_num!(n)))?)
             } else {
                 None
             },

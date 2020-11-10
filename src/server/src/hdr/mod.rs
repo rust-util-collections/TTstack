@@ -43,11 +43,11 @@ fn get_server_info(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
     let rsc = SERV.get_resource();
     let res = RespGetServerInfo {
         vm_total: rsc.vm_active,
-        cpu_total: rsc.cpu_total as u32,
+        cpu_total: rsc.cpu_total,
         cpu_used: rsc.cpu_used,
-        mem_total: rsc.mem_total as u32,
+        mem_total: rsc.mem_total,
         mem_used: rsc.mem_used,
-        disk_total: rsc.disk_total as u32,
+        disk_total: rsc.disk_total,
         disk_used: rsc.disk_used,
         supported_list: server::OS_INFO.read().keys().cloned().collect(),
     };

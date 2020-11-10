@@ -148,13 +148,13 @@ mod vmcfg {
 
     #[derive(Serialize)]
     struct MachineConfig {
-        vcpu_count: u32,
-        mem_size_mib: u32,
+        vcpu_count: i32,
+        mem_size_mib: i32,
         ht_enabled: bool,
     }
 
     impl MachineConfig {
-        fn new(vcpu_count: u32, mem_size_mib: u32) -> Self {
+        fn new(vcpu_count: i32, mem_size_mib: i32) -> Self {
             MachineConfig {
                 vcpu_count,
                 mem_size_mib,
