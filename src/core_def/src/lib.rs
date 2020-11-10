@@ -68,14 +68,11 @@ pub type PubPort = Port;
 /// 未来可能支持更多的容器引擎
 /// - [Y] Qemu
 /// - [Y] Bhyve
-/// - [N] FireCracker
-/// - [N] Jail
+/// - [Y] Firecracker
 /// - [N] Systemd Nspawn
-/// - [N] Firecracker
+/// - [N] Docker
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-#[non_exhaustive]
 #[allow(missing_docs)]
-#[serde(untagged)]
 pub enum VmKind {
     Qemu,
     Bhyve,

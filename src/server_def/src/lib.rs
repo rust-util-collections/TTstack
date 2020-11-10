@@ -148,10 +148,22 @@ pub struct ReqAddEnv {
 impl ReqAddEnv {
     /// 自动添加 SSH/ttrexec 端口影射
     pub fn set_ssh_port(&mut self) {
-        self.port_set.push(SSH_PORT);
-        self.port_set.push(TTREXEC_PORT);
-        self.port_set.sort_unstable();
-        self.port_set.dedup();
+        let set = |data: &mut Vec<VmPort>| {
+            data.push(SSH_PORT);
+            data.push(TTREXEC_PORT);
+            data.sort_unstable();
+            data.dedup();
+        };
+
+        if let Some(vc) = self.vmcfg.as_mut() {
+            // requests from TTproxy
+            vc.iter_mut().for_each(|cfg| {
+                set(&mut cfg.port_list);
+            });
+        } else {
+            // requests from TTclient
+            set(&mut self.port_set);
+        }
     }
 
     /// OS 前缀匹配不区分大小写

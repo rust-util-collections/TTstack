@@ -132,6 +132,13 @@ impl Serv {
         if env_set.get(&env.id).is_some() {
             Err(eg!("Env already exists!"))
         } else {
+            // !!! 必须在 cfg_db 之前!!!
+            // 创建成功, 默认为进行持久化缓存;
+            // 除非用户手动删除或生命周期耗完
+            env.vm.values_mut().for_each(|vm| {
+                vm.image_cached = true;
+            });
+
             self.cfg_db.write(&cli_id, &env).c(d!()).map(|_| {
                 env.cli_belong_to = Some(cli_id);
                 env_set.insert(env.id.clone(), env);
@@ -144,7 +151,12 @@ impl Serv {
     pub fn del_env(&self, cli_id: &CliIdRef, env_id: &EnvIdRef) {
         if let Some(env_set) = self.cli.write().get_mut(cli_id) {
             // drop 会自动清理资源
-            env_set.remove(env_id);
+            if let Some(mut env) = env_set.remove(env_id) {
+                // 标记待清理的实例镜像为可删除
+                env.vm.values_mut().for_each(|vm| {
+                    vm.image_cached = false;
+                })
+            }
         }
     }
 
@@ -879,7 +891,7 @@ impl Vm {
         }
     }
 
-    // 从 RocksDB 载入(启动服务时)先前存在的信息时会用到
+    // (启动服务时)载入先前存在的信息时会用到
     #[inline(always)]
     pub(crate) fn create_meta_from_cache(
         serv: &Weak<Serv>,
@@ -1107,12 +1119,25 @@ impl CfgDB {
                 if let Some(f) = path.file_name().map(|f| f.to_str()).flatten()
                 {
                     if path.is_file() && f.ends_with(".json") {
-                        fs::read(path)
+                        fs::read(&path)
                             .c(d!())
                             .and_then(|data| {
-                                serde_json::from_slice(&data).c(d!())
+                                serde_json::from_slice::<Env>(&data).c(d!())
                             })
-                            .map(|env| list.push(env))?
+                            .map(|env| {
+                                if env.vm.values().any(|vm| vm.image_cached) {
+                                    list.push(env);
+                                } else {
+                                    info_omit!(fs::remove_file(path));
+
+                                    // 服务进程异常退出时,
+                                    // 清理工作往往都没有做完,
+                                    // 新启动过程中尝试再次清理
+                                    env.vm.values().for_each(|i| {
+                                        omit!(vm::post_clean(i));
+                                    });
+                                }
+                            })?
                     }
                 }
             }
@@ -1129,7 +1154,7 @@ impl CfgDB {
 
     /// write new config to disk
     pub fn write(&self, cli_id: &CliIdRef, env: &Env) -> Result<()> {
-        serde_json::to_vec(env).c(d!()).and_then(|cfg| {
+        serde_json::to_string_pretty(env).c(d!()).and_then(|cfg| {
             let mut cfgpath = self.path.clone();
             cfgpath.push(base64::encode(cli_id));
             fs::create_dir_all(&cfgpath).c(d!())?;

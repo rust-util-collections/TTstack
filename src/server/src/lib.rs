@@ -34,29 +34,6 @@ lazy_static! {
 /// 服务启动入口
 pub fn start(cfg: cfg::Cfg) -> Result<()> {
     pnk!(cfg::register_cfg(Some(cfg)));
-
-    // 载入先前已存在的 ENV 实例
-    for (cli, env_set) in SERV.cfg_db.read_all().c(d!())?.into_iter() {
-        for (vm_set, env) in env_set.into_iter().map(|mut env| {
-            (
-                mem::take(&mut env.vm)
-                    .into_iter()
-                    .map(|(_, vm_set)| vm_set)
-                    .collect(),
-                env,
-            )
-        }) {
-            env.load(&SERV)
-                .c(d!())
-                .and_then(|mut env| {
-                    env.add_vm_set_complex(vct![], vm_set, true)
-                        .c(d!())
-                        .map(|_| env)
-                })
-                .and_then(|env| SERV.register_env(cli.clone(), env).c(d!()))?;
-        }
-    }
-
     init::setenv()
         .c(d!())
         .and_then(|_| ttcore::exec(&CFG.image_path, run, &CFG.serv_ip))
@@ -70,8 +47,35 @@ fn run() -> Result<()> {
     // 且 lazy_static 不会再次初始化线程池.
     init::start_cron();
 
+    // 必须在 clone 调用之后执行,
+    // 同样是因为 lazy_static 所限,
+    load_exists().c(d!())?;
+
     // (C/S) 网络交互
     start_netserv();
+}
+
+// 载入先前已存在的 ENV 实例
+fn load_exists() -> Result<()> {
+    let mut vm_set;
+    for (cli, env_set) in SERV.cfg_db.read_all().c(d!())?.into_iter() {
+        for mut env in env_set.into_iter() {
+            vm_set = mem::take(&mut env.vm)
+                .into_iter()
+                .map(|(_, vm_set)| vm_set)
+                .collect();
+            env.load(&SERV)
+                .c(d!())
+                .and_then(|mut env| {
+                    env.add_vm_set_complex(vct![], vm_set, true)
+                        .c(d!())
+                        .map(|_| env)
+                })
+                .and_then(|env| SERV.register_env(cli.clone(), env).c(d!()))?;
+        }
+    }
+
+    Ok(())
 }
 
 fn start_netserv() -> ! {

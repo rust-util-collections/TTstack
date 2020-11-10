@@ -12,17 +12,13 @@ pub struct Cfg {
     /// 服务地址和端口,
     /// eg: '10.10.10.22:9527'
     pub serv_at: String,
-    /// # Linux
     /// 基础镜像的存放路径,
-    /// 文件名称必须以 `.qemu` 结尾,
     /// 同时也是服务进程的工作路径;
     /// 需要可写权限,
     /// tap.sh 会创建在此路径下,
     /// Vm 镜像也会创建在相同的跟径下
-    /// # FreeBSD
-    /// 使用 ZFS 卷, 不需要写权限
     pub image_path: String,
-    /// Env Config 存放路径, 目前为 RocksDB 数据文件地址
+    /// Env Config 存放路径
     pub cfgdb_path: String,
     /// CPU 核心总数
     pub cpu_total: u32,

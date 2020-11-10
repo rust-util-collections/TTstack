@@ -18,7 +18,7 @@ fn parse_cfg() -> Result<Cfg> {
         .args_from_usage("--serv-port=[PORT] '服务监听端口.'")
         .args_from_usage("--log-path=[PATH] '日志存储路径.'")
         .args_from_usage("--image-path=[PATH] '镜像存放路径.'")
-        .args_from_usage("--cfgdb-path=[PATH] 'Env Config 存放路径, 目前为 RocksDB 数据文件地址.'")
+        .args_from_usage("--cfgdb-path=[PATH] 'Env Config 存放路径.'")
         .args_from_usage("--cpu-total=[NUM] '可以使用的 CPU 核心总数.'")
         .args_from_usage("--mem-total=[SIZE] '可以使用的内存总量, 单位: MB.'")
         .args_from_usage("--disk-total=[SIZE] '可以使用的磁盘总量, 单位: MB.'")
