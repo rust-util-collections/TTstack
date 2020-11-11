@@ -4,10 +4,10 @@
 //! Commiunication with client-end.
 //!
 
-use crate::{hdr, util, DEFAULT_REQ_ID, RECV_TO_SECS};
-use async_std::{future, net::SocketAddr};
+use crate::{hdr, util, DEFAULT_REQ_ID, RECV_TO_SECS, UAU_ID};
+use async_std::future;
 use myutil::{err::*, *};
-use std::time::Duration;
+use std::{sync::atomic::Ordering, time::Duration};
 use tide::{Body, Error, Request};
 
 macro_rules! err {
@@ -26,14 +26,7 @@ macro_rules! gen_hdr {
         ) -> tide::Result<Body> {
             const OPS_ID: usize = $idx;
             let msg = req.body_bytes().await?;
-            let uau_addr = req
-                .peer_addr()
-                .c(d!())
-                .map_err(|e| err!(@e))?
-                .parse::<SocketAddr>()?
-                .ip()
-                .to_string()
-                .into_bytes();
+            let uau_addr = UAU_ID.fetch_add(1, Ordering::Relaxed).to_ne_bytes();
 
             let (mysock, myaddr) = match util::gen_uau_socket(&uau_addr) {
                 Ok((s, a)) => (s, a),

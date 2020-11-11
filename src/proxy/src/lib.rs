@@ -24,6 +24,7 @@ use myutil::{err::*, *};
 use parking_lot::Mutex;
 use std::{
     os::unix::io::{IntoRawFd, RawFd},
+    sync::atomic::{AtomicU32, Ordering},
     sync::mpsc::channel,
     thread,
     time::Duration,
@@ -45,6 +46,8 @@ lazy_static! {
     static ref SOCK_MID: UdpSocket = pnk!(gen_middle_sock());
     static ref PROXY: Arc<Mutex<Proxy>> =
         Arc::new(Mutex::new(Proxy::default()));
+    /// Number bytes will be used as an uau address
+    static ref UAU_ID: AtomicU32 = AtomicU32::new(0);
 }
 
 /// Entry Point
@@ -187,15 +190,16 @@ async fn serv_it_udp(
     request: Vec<u8>,
     peeraddr: SocketAddr,
 ) -> Result<()> {
-    let (mysock, myaddr) =
-        match util::gen_uau_socket(&peeraddr.ip().to_string().into_bytes())
-            .c(d!())
-        {
-            Ok((s, a)) => (s, a),
-            Err(e) => {
-                return send_err!(@DEFAULT_REQ_ID, e, peeraddr);
-            }
-        };
+    let (mysock, myaddr) = match util::gen_uau_socket(
+        &UAU_ID.fetch_add(1, Ordering::Relaxed).to_ne_bytes(),
+    )
+    .c(d!())
+    {
+        Ok((s, a)) => (s, a),
+        Err(e) => {
+            return send_err!(@DEFAULT_REQ_ID, e, peeraddr);
+        }
+    };
 
     if let Some(ops) = hdr::OPS_MAP.get(ops_id) {
         ops(ops_id, myaddr, request)
