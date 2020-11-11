@@ -270,13 +270,18 @@ pub(crate) mod real {
             loop {
                 asleep(2).await;
                 let args = mem::take(&mut *RULE_SET.lock());
-                let args_allow_fail =
-                    mem::take(&mut *RULE_SET_ALLOW_FAIL.lock());
-
                 if !args.is_empty() {
                     POOL.spawn_ok(async move {
                         asleep(1).await;
                         info_omit!(nft_exec(dbg!(&args.join(""))));
+                    });
+                }
+
+                let args_allow_fail =
+                    mem::take(&mut *RULE_SET_ALLOW_FAIL.lock());
+                if !args_allow_fail.is_empty() {
+                    POOL.spawn_ok(async move {
+                        asleep(1).await;
                         args_allow_fail.iter().for_each(|arg| {
                             info_omit!(nft_exec(dbg!(&arg)));
                         })
