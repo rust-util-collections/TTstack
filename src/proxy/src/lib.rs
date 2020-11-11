@@ -13,6 +13,7 @@ mod http;
 mod util;
 
 use async_std::{
+    future,
     net::{SocketAddr, UdpSocket},
     sync::Arc,
     task,
@@ -25,9 +26,13 @@ use std::{
     os::unix::io::{IntoRawFd, RawFd},
     sync::mpsc::channel,
     thread,
+    time::Duration,
 };
 use ttserver_def::*;
 use ttutils::zlib;
+
+// recv timeout in seconds
+const RECV_TO_SECS: u64 = 12;
 
 lazy_static! {
     static ref CFG: &'static cfg::Cfg = pnk!(cfg::register_cfg(None));
@@ -198,7 +203,14 @@ async fn serv_it_udp(
             .or_else(|e| send_err!(@DEFAULT_REQ_ID, e, peeraddr))?;
 
         let mut buf = vec![0; 64 * 1024];
-        match mysock.recv(&mut buf).await.c(d!()) {
+        match future::timeout(
+            Duration::from_secs(RECV_TO_SECS),
+            mysock.recv(&mut buf),
+        )
+        .await
+        .c(d!())?
+        .c(d!())
+        {
             Ok(siz) => SOCK
                 .send_to(&buf[..siz], peeraddr)
                 .await

@@ -4,9 +4,10 @@
 //! Commiunication with client-end.
 //!
 
-use crate::{hdr, util, DEFAULT_REQ_ID};
-use async_std::net::SocketAddr;
+use crate::{hdr, util, DEFAULT_REQ_ID, RECV_TO_SECS};
+use async_std::{future, net::SocketAddr};
 use myutil::{err::*, *};
+use std::time::Duration;
 use tide::{Body, Error, Request};
 
 macro_rules! err {
@@ -44,9 +45,10 @@ macro_rules! gen_hdr {
                 .map_err(|e| err!(@e))?;
 
             let mut buf = vec![0; 128 * 1024];
-            mysock
-                .recv(&mut buf)
+            future::timeout(Duration::from_secs(RECV_TO_SECS), mysock.recv(&mut buf))
                 .await
+                .c(d!())
+                .map_err(|e| err!(@e))?
                 .c(d!())
                 .map(|siz| {
                     unsafe {
