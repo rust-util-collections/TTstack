@@ -127,10 +127,5 @@ pub fn send_req<T: Serialize>(
 /// 生成 Req 结构
 #[inline(always)]
 pub fn gen_req<T: Serialize>(msg: T) -> Req<T> {
-    let id = CFG.client_id.as_str();
-    if "" == id {
-        Req::new(0, msg)
-    } else {
-        Req::newx(0, Some(id.to_owned()), msg)
-    }
+    Req::new(0, CFG.client_id.clone(), msg)
 }

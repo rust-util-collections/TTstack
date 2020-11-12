@@ -49,8 +49,8 @@ macro_rules! fwd_to_slave {
 
         register_resp_hdr(num_to_wait, $cb, $peeraddr, $req.uuid, proxy_uuid);
 
-        let cli_id = $req.cli_id.take().unwrap_or_else(||$peeraddr.to_str());
-        send_req_to_slave($ops_id, Req::newx(proxy_uuid, Some(cli_id), mem::take(&mut $req.msg)), $addr_set)
+        let cli_id = mem::take(&mut $req.cli_id);
+        send_req_to_slave($ops_id, Req::new(proxy_uuid, cli_id, mem::take(&mut $req.msg)), $addr_set)
             .c(d!())
     }};
     (@@$ops_id: expr, $req: expr, $peeraddr: expr, $cb: tt, $addr_set: expr) => {{
@@ -133,7 +133,7 @@ pub(crate) fn get_env_info(
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
-        cli_id: Option<CliId>,
+        cli_id: CliId,
         msg: ReqGetEnvInfo,
     }
 
@@ -173,7 +173,7 @@ pub(crate) fn update_env_kick_vm(
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
-        cli_id: Option<CliId>,
+        cli_id: CliId,
         msg: ReqUpdateEnvKickVm,
     }
 
@@ -189,7 +189,7 @@ pub(crate) fn update_env_lifetime(
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
-        cli_id: Option<CliId>,
+        cli_id: CliId,
         msg: ReqUpdateEnvLife,
     }
 
@@ -211,7 +211,7 @@ pub(crate) fn del_env(
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
-        cli_id: Option<CliId>,
+        cli_id: CliId,
         msg: ReqDelEnv,
     }
 
@@ -247,7 +247,7 @@ pub(crate) fn stop_env(
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
-        cli_id: Option<CliId>,
+        cli_id: CliId,
         msg: ReqStopEnv,
     }
 
@@ -265,7 +265,7 @@ pub(crate) fn start_env(
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
-        cli_id: Option<CliId>,
+        cli_id: CliId,
         msg: ReqStartEnv,
     }
 
@@ -281,7 +281,7 @@ pub(crate) fn update_env_resource(
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
-        cli_id: Option<CliId>,
+        cli_id: CliId,
         msg: ReqUpdateEnvResource,
     }
 

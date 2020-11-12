@@ -82,6 +82,8 @@ pub fn cfg_init() -> Result<()> {
         fs::create_dir_all(CFG_PATH.as_str()).c(d!())?;
     }
 
+    // 如果存在并且格式解析通过, 则什么都不做;
+    // 否则就写入一个空文件
     read_cfg()
         .c(d!())
         .map(|_| ())

@@ -14,7 +14,7 @@ const SYNC_ITV: u64 = 1;
 
 pub(crate) fn start_cron() {
     // 一个空请求体即可
-    let mut req = Req::new(0, "");
+    let mut req = Req::new(0, format!("SYSTEM-CRON-{}", ts!()), "");
 
     // mock 一个地址
     let peeraddr = mock_addr();

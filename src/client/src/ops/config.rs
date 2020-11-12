@@ -20,6 +20,10 @@ impl<'a> Config<'a> {
     /// - 本地信息直接写入配置文件
     /// - 更新 server 信息时, 需验证其有效性
     pub fn do_req(&mut self) -> Result<()> {
+        if "" == self.client_id && "" == read_cfg().c(d!())?.client_id {
+            return Err(eg!("Client ID can't be empty !!!"));
+        }
+
         if "" != self.client_id {
             read_cfg().c(d!()).and_then(|mut cfg| {
                 // 尽可能避免分布式环境中的重复事件:

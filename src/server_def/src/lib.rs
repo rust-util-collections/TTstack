@@ -25,20 +25,15 @@ pub type ServerAddr = String;
 pub struct Req<T: Serialize> {
     /// rpc uuid
     pub uuid: u64,
-    /// 不指定则默认使用 IP
-    pub cli_id: Option<CliId>,
+    /// 客户端标识
+    pub cli_id: CliId,
     /// 消息正文
     pub msg: T,
 }
 
 impl<T: Serialize> Req<T> {
     /// create a new instance
-    pub fn new(uuid: u64, msg: T) -> Self {
-        Self::newx(uuid, None, msg)
-    }
-
-    /// create a new instance
-    pub fn newx(uuid: u64, cli_id: Option<CliId>, msg: T) -> Self {
+    pub fn new(uuid: u64, cli_id: CliId, msg: T) -> Self {
         Req { uuid, cli_id, msg }
     }
 }

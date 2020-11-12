@@ -134,7 +134,7 @@ fn send_req(
 
         send_req_to_slave(
             ops_id,
-            Req::newx(proxy_uuid, Some(cli_id.clone()), m),
+            Req::new(proxy_uuid, cli_id.clone(), m),
             &[slave_addr],
         )
         .c(d!())

@@ -18,11 +18,17 @@ pub(super) fn test() {
 }
 
 fn t_register_client_id() {
-    assert!(send_req("register_client_id", Req::new(0, "")).is_ok());
     assert!(
         send_req(
             "register_client_id",
-            Req::newx(0, Some(CUSTOM_CLI_ID.to_owned()), "")
+            Req::new(0, CUSTOM_CLI_ID.to_owned(), "")
+        )
+        .is_ok()
+    );
+    assert!(
+        send_req(
+            "register_client_id",
+            Req::new(0, CUSTOM_CLI_ID.to_owned(), "")
         )
         .is_ok()
     );
@@ -30,7 +36,10 @@ fn t_register_client_id() {
 
 fn t_get_server_info() {
     let uuid = 1111;
-    let resp = pnk!(send_req("get_server_info", Req::new(uuid, "")));
+    let resp = pnk!(send_req(
+        "get_server_info",
+        Req::new(uuid, CUSTOM_CLI_ID.to_owned(), "")
+    ));
 
     assert_eq!(resp.uuid, uuid);
     assert_eq!(resp.status, RetStatus::Success);
@@ -55,7 +64,10 @@ fn t_get_server_info() {
 fn t_get_env_list() {
     let uuid = 1111;
 
-    let resp = pnk!(send_req("get_env_list", Req::new(uuid, "")));
+    let resp = pnk!(send_req(
+        "get_env_list",
+        Req::new(uuid, CUSTOM_CLI_ID.to_owned(), "")
+    ));
 
     assert_eq!(resp.uuid, uuid);
     assert_eq!(resp.status, RetStatus::Success);
@@ -76,7 +88,10 @@ fn t_get_env_info() {
         env_set: vct!["abcxxx".to_owned(), "xxxabc".to_owned()],
     };
 
-    let resp = pnk!(send_req("get_env_info", Req::new(uuid, msg)));
+    let resp = pnk!(send_req(
+        "get_env_info",
+        Req::new(uuid, CUSTOM_CLI_ID.to_owned(), msg)
+    ));
 
     assert_eq!(resp.uuid, uuid);
     assert_eq!(resp.status, RetStatus::Success);
@@ -107,7 +122,10 @@ fn t_add_env() {
         vmcfg: None,
     };
 
-    let resp = pnk!(send_req("add_env", Req::new(uuid, msg)));
+    let resp = pnk!(send_req(
+        "add_env",
+        Req::new(uuid, CUSTOM_CLI_ID.to_owned(), msg)
+    ));
 
     assert_eq!(resp.uuid, uuid);
     assert_eq!(resp.status, RetStatus::Success);
@@ -123,7 +141,10 @@ fn t_del_env() {
         env_id: "UselessEnv".to_owned(),
     };
 
-    let resp = pnk!(send_req("del_env", Req::new(uuid, msg)));
+    let resp = pnk!(send_req(
+        "del_env",
+        Req::new(uuid, CUSTOM_CLI_ID.to_owned(), msg)
+    ));
 
     assert_eq!(resp.uuid, uuid);
     assert_eq!(resp.status, RetStatus::Success);
@@ -141,7 +162,10 @@ fn t_update_env_lifetime() {
         is_fucker: true,
     };
 
-    let resp = pnk!(send_req("update_env_lifetime", Req::new(uuid, msg)));
+    let resp = pnk!(send_req(
+        "update_env_lifetime",
+        Req::new(uuid, CUSTOM_CLI_ID.to_owned(), msg)
+    ));
 
     assert_eq!(resp.uuid, uuid);
     assert_eq!(resp.status, RetStatus::Fail);
@@ -156,7 +180,10 @@ fn t_update_env_kick_vm() {
         os_prefix: vct!["c".to_owned(), "u".to_owned()],
     };
 
-    let resp = pnk!(send_req("update_env_kick_vm", Req::new(uuid, msg)));
+    let resp = pnk!(send_req(
+        "update_env_kick_vm",
+        Req::new(uuid, CUSTOM_CLI_ID.to_owned(), msg)
+    ));
 
     assert_eq!(resp.uuid, uuid);
     assert_eq!(resp.status, RetStatus::Success);

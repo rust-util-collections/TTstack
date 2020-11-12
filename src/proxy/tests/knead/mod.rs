@@ -12,6 +12,8 @@ use ttserver_def::*;
 const ENV_OK: &str = "This will ok!";
 const ENV_FAIL: &str = "This will fail!";
 
+const CUSTOM_CLI_ID: &str = "HaEr";
+
 // 1. 创建两个 ENV, 第一个成功, 第二个失败(触发资源不足)
 // 2. 核对系统剩余可用资源的正确性
 // 3. 查询 ENV 列表, 应只获取一条信息, 且内容与预期的一致
@@ -117,7 +119,10 @@ pub(super) fn test() {
 
 fn get_server_info() -> RespGetServerInfo {
     let uuid = 5566;
-    let resp = pnk!(send_req("get_server_info", Req::new(uuid, "")));
+    let resp = pnk!(send_req(
+        "get_server_info",
+        Req::new(uuid, CUSTOM_CLI_ID.to_owned(), "")
+    ));
 
     assert_eq!(resp.uuid, uuid);
     assert_eq!(resp.status, RetStatus::Success);
@@ -151,7 +156,10 @@ fn get_server_info() -> RespGetServerInfo {
 fn get_env_list() -> RespGetEnvList {
     let uuid = 5567;
 
-    let resp = pnk!(send_req("get_env_list", Req::new(uuid, "")));
+    let resp = pnk!(send_req(
+        "get_env_list",
+        Req::new(uuid, CUSTOM_CLI_ID.to_owned(), "")
+    ));
     assert_eq!(resp.uuid, uuid);
     assert_eq!(resp.status, RetStatus::Success);
 
@@ -183,7 +191,10 @@ fn get_env_info(env_id: &str) -> Result<RespGetEnvInfo> {
         env_set: vct![env_id.to_owned()],
     };
 
-    let resp = pnk!(send_req("get_env_info", Req::new(uuid, msg)));
+    let resp = pnk!(send_req(
+        "get_env_info",
+        Req::new(uuid, CUSTOM_CLI_ID.to_owned(), msg)
+    ));
     assert_eq!(resp.uuid, uuid);
 
     if resp.status == RetStatus::Success {
@@ -236,7 +247,10 @@ fn add_env(env_id: &str, os_prefix: &[&str], cpu_num: i32) -> Resp {
         vmcfg: None,
     };
 
-    let resp = pnk!(send_req("add_env", Req::new(uuid, msg)));
+    let resp = pnk!(send_req(
+        "add_env",
+        Req::new(uuid, CUSTOM_CLI_ID.to_owned(), msg)
+    ));
     assert_eq!(resp.uuid, uuid);
 
     resp
@@ -248,7 +262,10 @@ fn del_env(env_id: &str) {
         env_id: env_id.to_owned(),
     };
 
-    let resp = pnk!(send_req("del_env", Req::new(uuid, msg)));
+    let resp = pnk!(send_req(
+        "del_env",
+        Req::new(uuid, CUSTOM_CLI_ID.to_owned(), msg)
+    ));
 
     assert_eq!(resp.uuid, uuid);
     assert_eq!(resp.status, RetStatus::Success);
@@ -265,7 +282,10 @@ fn update_life(env_id: &str, life: u64, is_fucker: bool) -> Resp {
         is_fucker,
     };
 
-    let resp = pnk!(send_req("update_env_lifetime", Req::new(uuid, msg)));
+    let resp = pnk!(send_req(
+        "update_env_lifetime",
+        Req::new(uuid, CUSTOM_CLI_ID.to_owned(), msg)
+    ));
     assert_eq!(resp.uuid, uuid);
 
     resp
@@ -282,7 +302,10 @@ fn kick_vm(env_id: &str, os_prefix: &[&str]) -> Resp {
             .collect::<Vec<_>>(),
     };
 
-    let resp = pnk!(send_req("update_env_kick_vm", Req::new(uuid, msg)));
+    let resp = pnk!(send_req(
+        "update_env_kick_vm",
+        Req::new(uuid, CUSTOM_CLI_ID.to_owned(), msg)
+    ));
     assert_eq!(resp.uuid, uuid);
 
     resp
