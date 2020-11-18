@@ -121,7 +121,7 @@ impl<'a> EnvUpdate<'a> {
                         let hdr = run::ttrexec::exec("date", vci_set);
                         let running_set = (0..vmid_set.len())
                             .filter_map(|_| {
-                                hdr.recv_timeout(time::Duration::from_secs(3))
+                                hdr.recv_timeout(time::Duration::from_secs(5))
                                     .ok()
                             })
                             .filter(|vci| 0 == vci.status_code)
