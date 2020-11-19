@@ -119,14 +119,23 @@ impl<'a> EnvUpdate<'a> {
                             .collect::<HashSet<_>>();
 
                         let hdr = run::ttrexec::exec("date", vci_set);
-                        let running_set = (0..vmid_set.len())
-                            .filter_map(|_| {
-                                hdr.recv_timeout(time::Duration::from_secs(5))
+                        let running_set = if hdr
+                            .recv_timeout(time::Duration::from_secs(8))
+                            .is_err()
+                        {
+                            HashSet::new()
+                        } else {
+                            (1..vmid_set.len())
+                                .filter_map(|_| {
+                                    hdr.recv_timeout(
+                                        time::Duration::from_secs(5),
+                                    )
                                     .ok()
-                            })
-                            .filter(|vci| 0 == vci.status_code)
-                            .map(|vci| vci.id)
-                            .collect::<HashSet<_>>();
+                                })
+                                .filter(|vci| 0 == vci.status_code)
+                                .map(|vci| vci.id)
+                                .collect::<HashSet<_>>()
+                        };
 
                         let to_kick = vmid_set
                             .difference(&running_set)
