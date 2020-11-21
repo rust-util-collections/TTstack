@@ -1,7 +1,7 @@
 # tt
 
-[![pipeline status](https://gitlab.com/ktmlm/tt/badges/master/pipeline.svg)](https://gitlab.com/ktmlm/tt/-/commits/master)
-[![coverage report](https://gitlab.com/ktmlm/tt/badges/master/coverage.svg)](https://gitlab.com/ktmlm/tt/-/commits/master)
+[![pipeline status](https://git.lug.ustc.edu.cn/kt10/ttstack/badges/master/pipeline.svg)](https://git.lug.ustc.edu.cn/kt10/ttstack/-/commits/master)
+[![coverage report](https://git.lug.ustc.edu.cn/kt10/ttstack/badges/master/coverage.svg)](https://git.lug.ustc.edu.cn/kt10/ttstack/-/commits/master)
 
 A light-weight 'private cloud solution' for SMEs, it can bring huge help and commercial value to start-up companies.
 
