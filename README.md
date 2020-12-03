@@ -1,3 +1,7 @@
+> **版权声明:**
+>
+> 本项目最初以 "MIT" 开源证书创建于 GitEE 平台, 后续所有代码的更新, 均是首先发布到该仓库, 不存在任何商用版权问题, 欢迎所有感兴趣的公司试用.
+
 # tt
 
 [![pipeline status](https://git.lug.ustc.edu.cn/kt10/ttstack/badges/master/pipeline.svg)](https://git.lug.ustc.edu.cn/kt10/ttstack/-/commits/master)
