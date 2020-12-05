@@ -46,6 +46,7 @@ OPTIONS:
         --cpu-total <NUM>      可以使用的 CPU 核心总数.
         --disk-total <SIZE>    可以使用的磁盘总量, 单位: MB.
         --image-path <PATH>    镜像存放路径.
+        --cfgdb-path <PATH>    ENV 配置信息存放路径.
         --log-path <PATH>      日志存储路径.
         --mem-total <SIZE>     可以使用的内存总量, 单位: MB.
         --serv-addr <ADDR>     服务监听地址.

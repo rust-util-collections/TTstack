@@ -89,6 +89,7 @@ export PATH=~/.cargo/bin:$PATH
 # Slave Server 1
 ttserver \
         --image-path /home/images \
+        --cfgdb-path /tmp \
         --cpu-total 2 \
         --mem-total $[4 * 1024 * 1024] \
         --disk-total $[40 * 1024 * 1024] \
@@ -98,6 +99,7 @@ ttserver \
 # Slave Server 2
 ttserver \
         --image-path /home/images \
+        --cfgdb-path /tmp \
         --cpu-total 2 \
         --mem-total $[4 * 1024 * 1024] \
         --disk-total $[40 * 1024 * 1024] \
