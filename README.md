@@ -1,5 +1,7 @@
 # tt
 
+> 祝 "Rust China Conf 2020" 取得圆满成功!
+
 [![pipeline status](https://git.lug.ustc.edu.cn/kt10/ttstack/badges/master/pipeline.svg)](https://git.lug.ustc.edu.cn/kt10/ttstack/-/commits/master)
 [![coverage report](https://git.lug.ustc.edu.cn/kt10/ttstack/badges/master/coverage.svg)](https://git.lug.ustc.edu.cn/kt10/ttstack/-/commits/master)
 
