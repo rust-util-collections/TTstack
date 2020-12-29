@@ -4,8 +4,9 @@
 >
 > 本项目最初以 "MIT" 开源证书创建于 [GitEE](https://gitee.com/kt10/ttstack) 平台, 之后所有的代码更新, 均是首先发布到[该仓库](https://gitee.com/kt10/ttstack), 不存在任何商用版权问题; 若有任何疑问, 可联系项目创始人 [**范辉** (微信: kite7x)](https://gitee.com/kt10).
 
-[![pipeline status](https://git.lug.ustc.edu.cn/kt10/ttstack/badges/master/pipeline.svg)](https://git.lug.ustc.edu.cn/kt10/ttstack/-/commits/master)
-[![coverage report](https://git.lug.ustc.edu.cn/kt10/ttstack/badges/master/coverage.svg)](https://git.lug.ustc.edu.cn/kt10/ttstack/-/commits/master)
+![pipeline status](https://git.lug.ustc.edu.cn/kt10/ttstack/badges/master/pipeline.svg)
+![coverage report](https://git.lug.ustc.edu.cn/kt10/ttstack/badges/master/coverage.svg)
+![](https://tokei.rs/b1/github/rustcc/ttstack)
 
 A light-weight 'private cloud solution' for SMEs, it can bring huge help and commercial value to start-up companies.
 
