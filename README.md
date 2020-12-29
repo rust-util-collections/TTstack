@@ -1,7 +1,8 @@
 # tt
 
-[![pipeline status](https://git.lug.ustc.edu.cn/kt10/ttstack/badges/master/pipeline.svg)](https://git.lug.ustc.edu.cn/kt10/ttstack/-/commits/master)
-[![coverage report](https://git.lug.ustc.edu.cn/kt10/ttstack/badges/master/coverage.svg)](https://git.lug.ustc.edu.cn/kt10/ttstack/-/commits/master)
+![pipeline status](https://git.lug.ustc.edu.cn/kt10/ttstack/badges/master/pipeline.svg)
+![coverage report](https://git.lug.ustc.edu.cn/kt10/ttstack/badges/master/coverage.svg)
+![](https://tokei.rs/b1/github/rustcc/ttstack)
 
 A light-weight 'private cloud solution' for SMEs, it can bring huge help and commercial value to start-up companies.
 
