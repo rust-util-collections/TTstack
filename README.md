@@ -1,8 +1,8 @@
 # tt
 
-![pipeline status](https://git.lug.ustc.edu.cn/kt10/ttstack/badges/master/pipeline.svg)
-![coverage report](https://git.lug.ustc.edu.cn/kt10/ttstack/badges/master/coverage.svg)
 ![](https://tokei.rs/b1/github/rustcc/ttstack)
+![pipeline status](https://gitlab.com/ktmlm/ttstack/badges/master/pipeline.svg)
+![coverage report](https://gitlab.com/ktmlm/ttstack/badges/master/coverage.svg)
 
 A light-weight 'private cloud solution' for SMEs, it can bring huge help and commercial value to start-up companies.
 
@@ -175,6 +175,8 @@ tt env del TEST
 ## Statistics
 
 ```
+# Tips: cargo install tokei
+
 (git)-[master]-% tokei
 ===============================================================================
  Language            Files        Lines         Code     Comments       Blanks
