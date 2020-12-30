@@ -21,7 +21,7 @@ pack: release
 	\
 	git submodule update --init --recursive
 	cd tools/firecracker \
-		&& cargo build --release --target-dir=$(BUILD_DIR) \
+		&& cargo build --release --target=$(TARGET) --target-dir=$(BUILD_DIR) \
 		&& cp $(BUILD_DIR)/$(TARGET)/release/firecracker $(PACK_DIR)/
 	\
 	chmod -R +x $(PACK_DIR)
