@@ -175,6 +175,8 @@ tt env del TEST
 ## Statistics
 
 ```
+# Tips: cargo install tokei
+
 (git)-[master]-% tokei
 ===============================================================================
  Language            Files        Lines         Code     Comments       Blanks
