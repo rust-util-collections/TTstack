@@ -4,10 +4,6 @@
 ![pipeline status](https://gitlab.com/ktmlm/ttstack/badges/master/pipeline.svg)
 ![coverage report](https://gitlab.com/ktmlm/ttstack/badges/master/coverage.svg)
 
-> 本项目自 2020/12/05 起, 已正式托管至 [Rust 中文社区](https://github.com/rustcc/ttstack) 的 [GitHub 仓库](https://github.com/rustcc/ttstack), 后续所有的 PR 及 ISSUE 等, 烦请提交至该仓库, 便于统一维护.
->
-> 本项目最初以 "MIT" 开源证书创建于 [GitEE](https://gitee.com/kt10/ttstack) 平台, 之后所有的代码更新, 均是首先发布到[该仓库](https://gitee.com/kt10/ttstack), 不存在任何商用版权问题; 若有任何疑问, 可联系项目创始人 [**范辉** (微信: kite7x)](https://gitee.com/kt10).
-
 A light-weight 'private cloud solution' for SMEs, it can bring huge help and commercial value to start-up companies.
 
 面向中小型企业的轻量级私有云平台, 可快速生成各种虚拟机环境, 为产品兼容性验证和自动化测试等场景提供高效的基础环境.
