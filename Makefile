@@ -49,7 +49,7 @@ lint: githook
 	cd src/server && $(CARGO) clippy --no-default-features --features="cow nft"
 	cd src/proxy && $(CARGO) clippy --features="testmock"
 
-test: test_debug test_release
+test: test_debug
 
 test_debug: stop
 	$(CARGO) test -- --test-threads=1 --nocapture
