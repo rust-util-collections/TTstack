@@ -67,3 +67,11 @@ OPTIONS:
         --proxy-addr <ADDR>       ttproxy 地址, eg: 127.0.0.1:19527.
         --server-set <ADDR>... ttserver 地址, eg: 127.0.0.1:9527,10.10.10.101:9527.
 ```
+
+## gitlab CI/CD
+
+shell 模式下, 需要将 `~gitlab-runner/.bash_logout` 删除:
+
+```shell
+rm ~gitlab-runner/.bash_logout
+```
