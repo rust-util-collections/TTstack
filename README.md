@@ -1,5 +1,7 @@
 # tt
 
+[**redesign in process...**](https://gitee.com/kt10/ttstack/tree/feat-redesign/)
+
 ![](https://tokei.rs/b1/github/rustcc/ttstack)
 ![pipeline status](https://gitlab.com/ktmlm/ttstack/badges/master/pipeline.svg)
 ![coverage report](https://gitlab.com/ktmlm/ttstack/badges/master/coverage.svg)
