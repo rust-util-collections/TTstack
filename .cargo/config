@@ -1,8 +1,11 @@
-[source.crates-io]
-replace-with = 'tuna'
+[net]
+git-fetch-with-cli = true
 
-[source.tuna]
-registry = "https://mirrors.tuna.tsinghua.edu.cn/git/crates.io-index.git"
+# [source.crates-io]
+# replace-with = 'tuna'
+#
+# [source.tuna]
+# registry = "https://mirrors.tuna.tsinghua.edu.cn/git/crates.io-index.git"
 
-# [target.x86_64-unknown-linux-musl]
-# linker = "musl-gcc"
+[target.x86_64-unknown-linux-musl]
+linker = "musl-gcc"

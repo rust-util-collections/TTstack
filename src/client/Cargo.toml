@@ -1,25 +1,16 @@
 [package]
-name = "tt"
-version = "0.3.2"
+name = "tt-client"
+version = "0.1.0"
 
-edition = "2018"
-authors = ["FanHui <fanhui.x@gmail.com>", "FanHui <hui.fan@mail.ru>"]
-description = "Lightweight private cloud solution for SME scenarios."
-license = "MIT OR Apache-2.0"
-keywords = ["firecracker", "qemu", "kvm", "openstack", "k8s", "cloud"]
+edition = "2021"
+authors = ["hui.fan@mail.ru"]
+description = "A simple private-cloud solution for developers and SMEs."
+license = "GPL-3.0"
+keywords = ["firecracker", "qemu", "docker", "openstack", "k8s"]
 categories = ["command-line-utilities"]
+homepage = "https://github.com/rust-util-collections/tt"
 
 [dependencies]
-clap = "2.33"
-lazy_static = "1.4"
+ruc = { workspace = true }
 
-nix = "0.18"
-serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-
-threadpool = "1.8"
-
-ttutils = { path = "../utils" }
-ttserver_def = { path = "../server_def" }
-ttrexec = { path = "../rexec", default-features = false, features = [ "client" ] }
-myutil = { git = "https://gitee.com/kt10/myutil", branch = "master" }
+[features]

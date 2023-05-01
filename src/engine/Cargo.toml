@@ -1,5 +1,5 @@
 [package]
-name = "tt-server"
+name = "tt-engine"
 version = "0.1.0"
 
 edition = "2021"
@@ -12,8 +12,5 @@ homepage = "https://github.com/rust-util-collections/tt"
 
 [dependencies]
 ruc = { workspace = true }
-
-tt-engine = { workspace = true }
-tt-framework = { workspace = true }
 
 [features]
