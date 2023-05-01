@@ -1,9 +1,9 @@
 [package]
-name = "tt-server"
+name = "tt"
 version = "0.1.0"
 
 edition = "2021"
-authors = ["hui.fan@mail.ru"]
+authors = ["dafanhui@163.com", "hui.fan@mail.ru"]
 description = "A simple private-cloud solution for developers and SMEs."
 license = "GPL-3.0"
 keywords = ["firecracker", "qemu", "docker", "openstack", "k8s"]
@@ -11,9 +11,19 @@ categories = ["command-line-utilities"]
 homepage = "https://github.com/rust-util-collections/tt"
 
 [dependencies]
-ruc = { workspace = true }
-
-tt-engine = { workspace = true }
-tt-framework = { workspace = true }
+tt-client = { path = "../client" }
+tt-server = { path = "../server" }
 
 [features]
+
+[[bin]]
+name = "tt"
+path = "src/bins/client.rs"
+
+[[bin]]
+name = "ttd"
+path = "src/bins/server.rs"
+
+[[bin]]
+name = "ttdproxy"
+path = "src/bins/server_proxy.rs"
