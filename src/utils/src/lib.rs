@@ -10,19 +10,19 @@ pub mod zlib {
         write::{ZlibDecoder, ZlibEncoder},
         Compression,
     };
-    use myutil::{err::*, *};
+    use ruc::*;
     use std::io::Write;
 
     /// compress
     pub fn encode(data: &[u8]) -> Result<Vec<u8>> {
-        let mut en = ZlibEncoder::new(vct![], Compression::default());
+        let mut en = ZlibEncoder::new(Vec::new(), Compression::default());
         en.write_all(data).c(d!())?;
         en.finish().c(d!())
     }
 
     /// decompress
     pub fn decode(data: &[u8]) -> Result<Vec<u8>> {
-        let mut d = ZlibDecoder::new(vct![]);
+        let mut d = ZlibDecoder::new(Vec::new());
         d.write_all(data).c(d!()).and_then(|_| d.finish().c(d!()))
     }
 
@@ -36,7 +36,7 @@ pub mod zlib {
             (0..(10 + random::<u8>() % 20))
                 .map(|i| (0..i).map(|_| random::<u8>()).collect::<Vec<_>>())
                 .for_each(|sample| {
-                    assert_eq!(sample, pnk!(decode(&pnk!(encode(&sample)))));
+                    assert_eq!(sample, unwrap!(decode(&unwrap!(encode(&sample)))));
                 });
         }
     }

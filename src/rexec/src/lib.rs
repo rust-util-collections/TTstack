@@ -1,12 +1,17 @@
 //!
 //! # fastexec
 //!
-//! 快速执行远程命令及双向转输文件.
+//! Fast execution of remote commands and bidirectional file transfer.
 //!
-//! 命令执行使用 UDP, 传输文件使用 TCP.
+//! Command execution uses UDP, file transfer uses TCP.
 //!
 
 #![warn(missing_docs, unused_import_braces, unused_extern_crates)]
+
+/// Generate log message from error
+pub fn genlog<E: std::fmt::Display>(err: E) -> String {
+    format!("{}", err)
+}
 
 #[cfg(feature = "client")]
 pub mod client;

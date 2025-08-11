@@ -2,7 +2,7 @@
 name = "ttserver"
 version = "0.3.2"
 
-edition = "2018"
+edition = "2024"
 authors = ["FanHui <fanhui.x@gmail.com>", "FanHui <hui.fan@mail.ru>"]
 description = "Lightweight private cloud solution for SME scenarios."
 license = "MIT OR Apache-2.0"
@@ -10,24 +10,24 @@ keywords = ["firecracker", "qemu", "kvm", "openstack", "k8s", "cloud"]
 categories = ["command-line-utilities"]
 
 [dependencies]
-nix = "0.19"
-clap = "2.33"
-lazy_static = "1.4"
+nix = { version = "0.29.0", features = ["socket", "uio", "zerocopy", "fs"] }
+clap = "4.5.26"
+lazy_static = "1.5.0"
 
-serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.133"
+serde = { version = "1.0.216", features = ["derive"] }
 
-futures = { version = "0.3.2", features = ["thread-pool"] }
-futures-timer = "3.0"
+futures = { version = "0.3.31", features = ["thread-pool"] }
+futures-timer = "3.0.3"
 
-num_cpus = "1.13"
-parking_lot = "0.11"
+num_cpus = "1.16.0"
+parking_lot = "0.12.3"
 
 ttutils = { path = "../utils" }
 ttcore = { path = "../core", default-features = false }
 ttserver_def = { path = "../server_def" }
 
-myutil = { git = "https://gitee.com/kt10/myutil", branch = "master" }
+ruc = "8.1.2"
 
 [features]
 default = [ "nft", "zfs" ]

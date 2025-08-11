@@ -6,7 +6,7 @@ use super::super::{
     run::{ssh, VmConnInfo},
     POOL,
 };
-use myutil::{err::*, *};
+use ruc::*;
 use std::sync::mpsc::{channel, Receiver};
 
 /// 执行外部的 scp 命令,

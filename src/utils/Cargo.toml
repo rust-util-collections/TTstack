@@ -3,15 +3,15 @@ name = "ttutils"
 version = "0.3.2"
 
 authors = ["FanHui <hui.fan@mail.ru>"]
-edition = "2018"
+edition = "2024"
 description = "Lightweight private cloud solution for SME scenarios."
 license = "MIT OR Apache-2.0"
 keywords = ["firecracker", "qemu", "kvm", "openstack", "k8s", "cloud"]
 categories = ["command-line-utilities"]
 
 [dependencies]
-flate2 = "1.0"
-myutil = { git = "https://gitee.com/kt10/myutil", branch = "master" }
+flate2 = "1.0.35"
+ruc = "8.1.2"
 
 [dev-dependencies]
-rand = "0.7"
+rand = "0.8.5"

@@ -6,9 +6,14 @@
 
 use crate::{hdr, util, DEFAULT_REQ_ID, RECV_TO_SECS, UAU_ID};
 use async_std::future;
-use myutil::{err::*, *};
+use ruc::{*, err::*};
 use std::{sync::atomic::Ordering, time::Duration};
 use tide::{Body, Error, Request};
+
+/// Generate log message from error
+pub fn genlog<E: std::fmt::Display>(err: E) -> String {
+    format!("{}", err)
+}
 
 macro_rules! err {
     (@$e: expr) => {

@@ -24,7 +24,7 @@ pub mod status;
 
 use crate::CFG;
 use lazy_static::lazy_static;
-use myutil::{err::*, *};
+use ruc::*;
 use serde::Serialize;
 use std::{
     collections::HashMap,

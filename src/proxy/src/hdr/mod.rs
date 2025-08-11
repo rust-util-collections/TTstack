@@ -3,7 +3,7 @@
 //!
 //! Operations to deal with the requests from client.
 //!
-//! 与 Server 同名接口的对外表现完全一致.
+//! External behavior is completely consistent with Server's interfaces of the same name.
 //!
 
 mod add_env;
@@ -13,8 +13,8 @@ use crate::{def::*, send_err, send_ok, CFG, PROXY, SOCK_MID};
 use add_env::add_env;
 use async_std::{net::SocketAddr, task};
 use lazy_static::lazy_static;
-use myutil::{err::*, *};
-use nix::sys::socket::SockAddr;
+use ruc::{*, err::*};
+use nix::sys::socket::SockaddrStorage;
 use parking_lot::RwLock;
 use serde::Deserialize;
 use serde::Serialize;
@@ -36,11 +36,11 @@ lazy_static! {
         Arc::new(RwLock::new(map! {}));
 }
 
-type Ops = fn(usize, SockAddr, Vec<u8>) -> Result<()>;
+type Ops = fn(usize, SockAddr, Vec<u8>) -> ruc::Result<()>;
 include!("../../../server_def/src/included_ops_map.rs");
 
-/// 将客户端的请求,
-/// 分发至后台的各个 Slave Server.
+/// Distribute client requests
+/// to various background Slave Servers.
 #[macro_export(crate)]
 macro_rules! fwd_to_slave {
     (@@@$ops_id: expr, $req: expr, $peeraddr: expr, $cb: tt, $addr_set: expr) => {{
@@ -72,31 +72,31 @@ macro_rules! fwd_to_slave {
     }};
 }
 
-/// 注册 Cli, 一般无需调用,
-/// 创建 Env 时若发现 Cli 不存在会自动创建之,
-/// 此接口在 Proxy 中实现为"什么都不做, 直接返回成功".
+/// Register client, generally no need to call,
+/// When creating Env, if client does not exist it will be automatically created,
+/// This interface is implemented in Proxy as "do nothing, directly return success".
 pub(crate) fn register_client_id(
     _ops_id: usize,
     peeraddr: SockAddr,
     request: Vec<u8>,
-) -> Result<()> {
+) -> ruc::Result<()> {
     let req = serde_json::from_slice::<Req<&str>>(&request).c(d!())?;
     let resp = Resp {
         uuid: req.uuid,
         status: RetStatus::Success,
-        msg: vct![],
+        msg: vec![],
     };
     send_ok!(req.uuid, resp, peeraddr)
 }
 
-/// 获取服务端的资源分配信息,
-/// 直接从定时任务的结果中提取, 不做实时请求.
+/// Get server resource allocation information,
+/// directly extracted from scheduled task results, no real-time requests.
 pub(crate) fn get_server_info(
     ops_id: usize,
     peeraddr: SockAddr,
     request: Vec<u8>,
-) -> Result<()> {
-    // 汇聚各 Slave 的信息
+) -> ruc::Result<()> {
+    // Aggregate information from various Slaves
     fn cb(r: &mut SlaveRes) {
         info_omit!(resp_cb_merge::<RespGetServerInfo>(r));
     }
@@ -107,13 +107,13 @@ pub(crate) fn get_server_info(
     fwd_to_slave!(@@ops_id, req, peeraddr, cb, &addr_set)
 }
 
-/// 获取服务端已存在的 Env 概略信息
+/// Get summary information of existing Env on server
 pub(crate) fn get_env_list(
     ops_id: usize,
     peeraddr: SockAddr,
     request: Vec<u8>,
-) -> Result<()> {
-    // 汇聚各 Slave 的信息
+) -> ruc::Result<()> {
+    // Aggregate information from various Slaves
     fn cb(r: &mut SlaveRes) {
         info_omit!(resp_cb_merge::<RespGetEnvList>(r));
     }
@@ -124,12 +124,12 @@ pub(crate) fn get_env_list(
     fwd_to_slave!(@@ops_id, req, peeraddr, cb, &addr_set)
 }
 
-// 获取服务端已存在的 Env 详细信息
+// Get detailed information of existing Env on server
 pub(crate) fn get_env_info(
     ops_id: usize,
     peeraddr: SockAddr,
     request: Vec<u8>,
-) -> Result<()> {
+) -> ruc::Result<()> {
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
@@ -137,7 +137,7 @@ pub(crate) fn get_env_info(
         msg: ReqGetEnvInfo,
     }
 
-    // 汇聚各 Slave 的信息
+    // Aggregate information from various Slaves
     fn cb(r: &mut SlaveRes) {
         info_omit!(resp_cb_merge::<RespGetEnvInfo>(r));
     }
@@ -164,12 +164,12 @@ pub(crate) fn get_env_info(
     fwd_to_slave!(@@ops_id, req, peeraddr, cb, &addr_set)
 }
 
-/// 从已有 ENV 中踢出指定的 VM 实例
+/// Kick out specified VM instances from existing ENV
 pub(crate) fn update_env_kick_vm(
     ops_id: usize,
     peeraddr: SockAddr,
     request: Vec<u8>,
-) -> Result<()> {
+) -> ruc::Result<()> {
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
@@ -185,7 +185,7 @@ pub(crate) fn update_env_lifetime(
     ops_id: usize,
     peeraddr: SockAddr,
     request: Vec<u8>,
-) -> Result<()> {
+) -> ruc::Result<()> {
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
@@ -207,7 +207,7 @@ pub(crate) fn del_env(
     ops_id: usize,
     peeraddr: SockAddr,
     request: Vec<u8>,
-) -> Result<()> {
+) -> ruc::Result<()> {
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
@@ -225,13 +225,13 @@ pub(crate) fn del_env(
     fwd_to_slave!(@@ops_id, req, peeraddr, resp_cb_simple, &addr_set)
 }
 
-/// 获取服务端已存在的 Env 概略信息(全局)
+/// Get summary information of existing Env on server(全局)
 #[inline(always)]
 pub(crate) fn get_env_list_all(
     ops_id: usize,
     peeraddr: SockAddr,
     request: Vec<u8>,
-) -> Result<()> {
+) -> ruc::Result<()> {
     get_env_list(ops_id, peeraddr, request).c(d!())
 }
 
@@ -243,7 +243,7 @@ pub(crate) fn stop_env(
     ops_id: usize,
     peeraddr: SockAddr,
     request: Vec<u8>,
-) -> Result<()> {
+) -> ruc::Result<()> {
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
@@ -261,7 +261,7 @@ pub(crate) fn start_env(
     ops_id: usize,
     peeraddr: SockAddr,
     request: Vec<u8>,
-) -> Result<()> {
+) -> ruc::Result<()> {
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
@@ -277,7 +277,7 @@ pub(crate) fn update_env_resource(
     ops_id: usize,
     peeraddr: SockAddr,
     request: Vec<u8>,
-) -> Result<()> {
+) -> ruc::Result<()> {
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
@@ -323,7 +323,7 @@ fn resp_cb_simple(r: &mut SlaveRes) {
 // 该回调仅用于查询类接口, 采用 “尽力而为” 模式, 部分返回即视为成功.
 fn resp_cb_merge<'a, T: Serialize + Deserialize<'a>>(
     r: &'a mut SlaveRes,
-) -> Result<()> {
+) -> ruc::Result<()> {
     if 0 < r.num_to_wait {
         p(eg!("Not all slave-server[s] reponsed!"));
     }
@@ -352,7 +352,7 @@ fn send_req_to_slave<T: Serialize>(
     ops_id: usize,
     req: Req<T>,
     slave_set: &[SocketAddr],
-) -> Result<()> {
+) -> ruc::Result<()> {
     let mut req_bytes = serde_json::to_vec(&req)
         .c(d!())
         .and_then(|req| zlib::encode(&req[..]).c(d!()))?;

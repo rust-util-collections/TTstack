@@ -20,7 +20,7 @@ use async_std::{
 };
 use def::Proxy;
 use lazy_static::lazy_static;
-use myutil::{err::*, *};
+use ruc::{*, err::*};
 use parking_lot::Mutex;
 use std::{
     os::unix::io::{IntoRawFd, RawFd},
@@ -51,7 +51,7 @@ lazy_static! {
 }
 
 /// Entry Point
-pub fn start(cfg: cfg::Cfg) -> Result<()> {
+pub fn start(cfg: cfg::Cfg) -> ruc::Result<()> {
     pnk!(cfg::register_cfg(Some(cfg)));
 
     thread::spawn(|| {
@@ -73,7 +73,7 @@ fn start_middle_serv() {
     fn deal_slave_resp(
         peeraddr: SocketAddr,
         slave_resp: Vec<u8>,
-    ) -> Result<()> {
+    ) -> ruc::Result<()> {
         zlib::decode(&slave_resp[..])
             .c(d!())
             .and_then(|resp_decompressed| {
@@ -189,7 +189,7 @@ async fn serv_it_udp(
     ops_id: usize,
     request: Vec<u8>,
     peeraddr: SocketAddr,
-) -> Result<()> {
+) -> ruc::Result<()> {
     let (mysock, myaddr) = match util::gen_uau_socket(
         &UAU_ID.fetch_add(1, Ordering::Relaxed).to_ne_bytes(),
     )
@@ -228,12 +228,12 @@ async fn serv_it_udp(
 }
 
 #[inline(always)]
-fn parse_ops_id(raw: &[u8]) -> Result<usize> {
+fn parse_ops_id(raw: &[u8]) -> ruc::Result<usize> {
     String::from_utf8_lossy(raw).parse::<usize>().c(d!())
 }
 
 /// 生成与 Client 通信的套接字
-fn gen_master_sock() -> Result<UdpSocket> {
+fn gen_master_sock() -> ruc::Result<UdpSocket> {
     let (s, r) = channel();
     task::spawn(async move {
         let sock = UdpSocket::bind(&CFG.proxy_serv_at).await;
@@ -246,7 +246,7 @@ fn gen_master_sock() -> Result<UdpSocket> {
 }
 
 /// 生成与 Slave Server 通信的套接字
-fn gen_middle_sock() -> Result<UdpSocket> {
+fn gen_middle_sock() -> ruc::Result<UdpSocket> {
     let (s, r) = channel();
     let mut addr;
     for port in (20_000 + ts!() % 10_000)..60_000 {

@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::{get_servaddr, resp_parse, resp_print, CFG};
-use myutil::{err::*, *};
+use ruc::*;
 use std::collections::HashMap;
 
 ///////////////////////////////

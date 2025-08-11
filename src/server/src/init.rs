@@ -3,14 +3,14 @@
 //!
 
 use crate::{hdr::server::refresh_os_info, util::asleep, CFG, POOL, SERV};
-use myutil::{err::*, *};
+use ruc::{*, err::*};
 use nix::unistd;
 #[cfg(not(feature = "testmock"))]
 use std::{fs, mem};
 
 // 设置基本运行环境
 #[inline(always)]
-pub(super) fn setenv() -> Result<()> {
+pub(super) fn setenv() -> ruc::Result<()> {
     unistd::chdir(CFG.image_path.as_str())
         .c(d!())
         .and_then(|_| log_init(CFG.log_path.as_deref()).c(d!()))
@@ -50,7 +50,7 @@ async fn clean_expired_env() {
 
 // 输出日志至文件
 #[cfg(not(feature = "testmock"))]
-fn log_init(log_path: Option<&str>) -> Result<()> {
+fn log_init(log_path: Option<&str>) -> ruc::Result<()> {
     const LOG_PATH: &str = "/tmp/ttserver.log";
 
     let path = log_path.unwrap_or(LOG_PATH);
@@ -73,6 +73,6 @@ fn log_init(log_path: Option<&str>) -> Result<()> {
 
 // 输出日志至文件
 #[cfg(feature = "testmock")]
-fn log_init(_log_path: Option<&str>) -> Result<()> {
+fn log_init(_log_path: Option<&str>) -> ruc::Result<()> {
     Ok(())
 }

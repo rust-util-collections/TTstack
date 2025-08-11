@@ -5,13 +5,24 @@
 use crate::{def::*, POOL, SOCK};
 use futures::executor::{ThreadPool, ThreadPoolBuilder};
 use futures_timer::Delay;
-use myutil::{err::*, *};
+use ruc::{*, err::*};
 use serde::Serialize;
 use std::{net::SocketAddr, time::Duration};
 use ttutils::zlib;
 
+/// Generate log message from error
+pub(crate) fn genlog<E: std::fmt::Display>(err: E) -> String {
+    format!("{}", err)
+}
+
+/// Print function for logging/debugging
+pub(crate) fn p<T: std::fmt::Display>(msg: T) -> T {
+    eprintln!("{}", msg);
+    msg
+}
+
 /// 生成异步框架底层的线程池
-pub(crate) fn gen_thread_pool(n: Option<u8>) -> Result<ThreadPool> {
+pub(crate) fn gen_thread_pool(n: Option<u8>) -> ruc::Result<ThreadPool> {
     ThreadPoolBuilder::new()
         .pool_size(n.map(|n| n as usize).unwrap_or_else(num_cpus::get))
         .create()
@@ -63,7 +74,7 @@ pub(crate) fn gen_resp_err(uuid: u64, msg: &str) -> Resp {
 
 /// 回送信息至请求方(Client/Proxy)
 #[inline(always)]
-pub(crate) fn send_back(resp: Resp, peeraddr: SocketAddr) -> Result<()> {
+pub(crate) fn send_back(resp: Resp, peeraddr: SocketAddr) -> ruc::Result<()> {
     serde_json::to_vec(&resp)
         .c(d!())
         .and_then(|resp| zlib::encode(&resp[..]).c(d!()))

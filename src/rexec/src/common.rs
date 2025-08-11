@@ -2,10 +2,10 @@
 //! # Common utils
 //!
 
-use myutil::{err::*, *};
+use ruc::*;
 use serde::{Deserialize, Serialize};
 use std::{
-    borrow::Cow, fs::File, ops::Deref, os::unix::io::RawFd, path::Path,
+    borrow::Cow, fs::File, ops::Deref, os::unix::io::{AsFd, BorrowedFd, IntoRawFd, RawFd}, path::Path,
 };
 
 /// 服务端在回复 Resp 结构之前,
@@ -55,7 +55,7 @@ impl<'a> TransReq<'a> {
         drct: Direction,
         local_file_path: &'a str,
         remote_file_path: &'a str,
-    ) -> Result<Self> {
+    ) -> ruc::Result<Self> {
         let file_size = if Direction::Push == drct {
             File::open(local_file_path)
                 .c(d!())?
@@ -117,6 +117,12 @@ impl Deref for FileHdr {
     }
 }
 
+impl AsFd for FileHdr {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        unsafe { BorrowedFd::borrow_raw(self.0) }
+    }
+}
+
 impl Drop for FileHdr {
     fn drop(&mut self) {
         info_omit!(nix::unistd::close(self.0));
@@ -132,7 +138,7 @@ macro_rules! gen_sock {
             nix::sys::socket::SockFlag::SOCK_CLOEXEC,
             None,
         )
-        .map(FileHdr)
+        .map(|fd| FileHdr::new(fd.into_raw_fd()))
         .c(d!())
     }};
 }
@@ -146,19 +152,19 @@ macro_rules! gen_sock {
             nix::sys::socket::SockFlag::empty(),
             None,
         )
-        .map(FileHdr)
+        .map(|fd| FileHdr::new(fd.into_raw_fd()))
         .c(d!())
     }};
 }
 
 /// 创建 UDP 套接字
 #[inline(always)]
-pub fn gen_udp_sock() -> Result<FileHdr> {
+pub fn gen_udp_sock() -> ruc::Result<FileHdr> {
     gen_sock!(Inet, Datagram)
 }
 
 /// 创建 TCP 套接字
 #[inline(always)]
-pub fn gen_tcp_sock() -> Result<FileHdr> {
+pub fn gen_tcp_sock() -> ruc::Result<FileHdr> {
     gen_sock!(Inet, Stream)
 }

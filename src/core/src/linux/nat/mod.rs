@@ -12,7 +12,7 @@ pub(crate) mod real {
     //! 此处只需实现空接口兼容上层逻辑即可.
 
     use crate::Vm;
-    use myutil::err::*;
+    use ruc::*;
 
     #[inline(always)]
     pub(in crate::linux) fn init(_serv_ip: &str) -> Result<()> {
@@ -93,7 +93,7 @@ pub(crate) mod real {
 
     use crate::{asleep, Vm, POOL};
     use lazy_static::lazy_static;
-    use myutil::{err::*, *};
+    use ruc::*;
     use parking_lot::Mutex;
     use std::{collections::HashSet, mem, process, sync::Arc};
 

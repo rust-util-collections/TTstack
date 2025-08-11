@@ -70,7 +70,7 @@
 //!
 
 use crate::linux::vm::{cmd_exec_daemonize, engine::qemu, Vm};
-use myutil::{err::*, *};
+use ruc::*;
 use std::fs;
 
 pub(crate) const LOG_DIR: &str = "/home/firecracker_vm_log";
@@ -131,7 +131,7 @@ pub(super) fn set_tap(vm: &Vm) -> Result<()> {
 
 mod vmcfg {
     use crate::{linux::vm::Vm, vmimg_path};
-    use myutil::{err::*, *};
+    use ruc::*;
     use serde::Serialize;
 
     #[derive(Serialize)]

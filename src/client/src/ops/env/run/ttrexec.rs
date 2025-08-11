@@ -3,7 +3,7 @@
 //!
 
 use super::{ssh::USER, VmConnInfo};
-use myutil::{err::*, *};
+use ruc::*;
 use std::{
     sync::mpsc::{channel, Receiver},
     thread,

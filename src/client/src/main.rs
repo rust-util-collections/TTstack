@@ -9,8 +9,13 @@ pub mod cmd_line;
 mod ops;
 
 pub use cfg_file::*;
-use myutil::{err::*, *};
+use ruc::*;
 use std::process;
+
+/// Generate log message from error
+pub fn genlog<E: std::fmt::Display>(err: E) -> String {
+    format!("{}", err)
+}
 
 fn main() {
     pnk!(cfg_file::cfg_init());

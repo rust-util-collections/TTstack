@@ -15,13 +15,14 @@ mod util;
 use def::{DEFAULT_REQ_ID, OPS_ID_LEN};
 use futures::executor::ThreadPool;
 use lazy_static::lazy_static;
-use myutil::{err::*, *};
+use ruc::{*, err::*};
 use std::{
     mem,
     net::{SocketAddr, UdpSocket},
     sync::Arc,
 };
 use ttutils::zlib;
+use util::{genlog, p};
 
 lazy_static! {
     static ref POOL: ThreadPool = pnk!(util::gen_thread_pool(Some(8)));
@@ -32,7 +33,7 @@ lazy_static! {
 }
 
 /// 服务启动入口
-pub fn start(cfg: cfg::Cfg) -> Result<()> {
+pub fn start(cfg: cfg::Cfg) -> ruc::Result<()> {
     pnk!(cfg::register_cfg(Some(cfg)));
     init::setenv()
         .c(d!())
@@ -40,7 +41,7 @@ pub fn start(cfg: cfg::Cfg) -> Result<()> {
 }
 
 #[inline(always)]
-fn run() -> Result<()> {
+fn run() -> ruc::Result<()> {
     // 必须在 clone 调用之后执行,
     // 否则会导致 POOL 在父进程中被初始化,
     // 进入子进程后只会保留一个主线程,
@@ -56,7 +57,7 @@ fn run() -> Result<()> {
 }
 
 // 载入先前已存在的 ENV 实例
-fn load_exists() -> Result<()> {
+fn load_exists() -> ruc::Result<()> {
     let mut vm_set;
     for (cli, env_set) in SERV.cfg_db.read_all().c(d!())?.into_iter() {
         for mut env in env_set.into_iter() {
@@ -67,7 +68,7 @@ fn load_exists() -> Result<()> {
             env.load(&SERV)
                 .c(d!())
                 .and_then(|mut env| {
-                    env.add_vm_set_complex(vct![], vm_set, true)
+                    env.add_vm_set_complex(vec![], vm_set, true)
                         .c(d!())
                         .map(|_| env)
                 })
@@ -106,7 +107,7 @@ async fn serv_it(
     ops_id: usize,
     msg_body: Vec<u8>,
     peeraddr: SocketAddr,
-) -> Result<()> {
+) -> ruc::Result<()> {
     hdr::OPS_MAP
         .get(ops_id)
         .ok_or(eg!(format!("Unknown Request: {}", ops_id)))
@@ -115,6 +116,6 @@ async fn serv_it(
 }
 
 #[inline(always)]
-fn parse_ops_id(raw: &[u8]) -> Result<usize> {
+fn parse_ops_id(raw: &[u8]) -> ruc::Result<usize> {
     String::from_utf8_lossy(raw).parse::<usize>().c(d!())
 }

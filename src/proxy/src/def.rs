@@ -1,44 +1,44 @@
 //!
 //! # Proxy Data Structure
 //!
-//! 选用 async req/resp 模型,
-//! SlaveServer 的回复与 C/S 逻辑共用一套网络设施,
-//! 请求发出后不做等待(包括异步等待和超时等待),后续根据 UUID 匹配处理.
+//! Uses async req/resp model,
+//! SlaveServer responses share the same network infrastructure with C/S logic,
+//! No waiting after request is sent (including async waiting and timeout waiting), subsequent processing based on UUID matching.
 //!
 
-use myutil::*;
-use nix::sys::socket::SockAddr;
+use ruc::*;
+use nix::sys::socket::SockaddrStorage;
 use std::{collections::HashMap, mem, net::SocketAddr};
 use ttserver_def::{Resp, UUID};
 
-/// UNIX 时间戳
+/// UNIX timestamp
 pub type TS = u64;
 
-/// Proxy Bucket 索引
+/// Proxy Bucket index
 pub type IDX = usize;
 
-/// Proxy 到 SlaveServer 的请求超时时间
+/// Request timeout from Proxy to SlaveServer
 pub const TIMEOUT_SECS: usize = 5;
 
-/// 每秒轮询一次,
-/// 将已超时的 bucket 中的数据整体丢弃,
-/// 触发 Drop 机制, 在其中实现回复 Client 的逻辑
+/// Poll once per second,
+/// Discard data in timed-out buckets entirely,
+/// Trigger Drop mechanism, implement Client reply logic within it
 ///
-/// bucket 索引计算方式:
+/// bucket index calculation method:
 /// - `idx = ts!() % TIMEOUT_SECS`
 #[derive(Default)]
 pub struct Proxy {
-    /// 查询 UUID 对应的 bucket
+    /// Query bucket corresponding to UUID
     pub idx_map: HashMap<UUID, IDX>,
-    /// 按秒分割存储, 便于资源清理,
-    /// 同一秒内产生的请求均位于同一 bucket 中
+    /// Store by second division for easier resource cleanup,
+    /// Requests generated within the same second are all in the same bucket
     pub buckets: [Bucket; TIMEOUT_SECS],
 }
 
 impl Proxy {
-    /// 通常是每秒清理一次,
-    /// 但定时任务不能保证与时间严格对齐,
-    /// 比当前时间戳晚 5 秒以上的 bucket 都要清理
+    /// Usually cleaned once per second,
+    /// but scheduled tasks cannot guarantee strict time alignment,
+    /// buckets more than 5 seconds later than current timestamp need to be cleaned
     pub fn clean_timeout(&mut self) {
         let ts_deadline = ts!() - TIMEOUT_SECS as u64;
         (0..TIMEOUT_SECS)
@@ -53,11 +53,11 @@ impl Proxy {
     }
 }
 
-/// 轮询的基本单位
+/// Basic unit of polling
 pub struct Bucket {
-    /// 时间戳
+    /// Timestamp
     pub ts: TS,
-    /// Slave 结果集
+    /// Slave result set
     pub res: HashMap<UUID, SlaveRes>,
 }
 

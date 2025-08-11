@@ -3,14 +3,11 @@
 //!
 
 use crate::ops::{config::*, env::*, status::*};
-use clap::{
-    crate_authors, crate_description, crate_name, crate_version, App, Arg,
-    ArgMatches, SubCommand,
-};
-use myutil::{err::*, *};
+use clap::{Arg, ArgMatches, Command};
+use ruc::*;
 use std::{path::Path, process};
 
-// 报错并退出
+// Report error and exit
 macro_rules! err {
     ($app: expr) => {
         err!("", $app);
@@ -19,7 +16,7 @@ macro_rules! err {
         eprintln!(
             "\n\x1b[31;01mInvalid arguments\x1b[00m\t{}\n\n{}\n",
             $msg,
-            $app.usage()
+            $app.render_usage()
         );
         process::exit(1);
     }};
@@ -42,117 +39,282 @@ macro_rules! not_num {
     };
 }
 
-/// 解析命令行参数
+/// Parse command line arguments
 pub fn parse_and_exec() -> Result<()> {
-    let m = App::new(crate_name!())
-        .version(crate_version!())
-        .author(crate_authors!())
-        .about(crate_description!())
+    let m = Command::new(env!("CARGO_PKG_NAME"))
+        .version(env!("CARGO_PKG_VERSION"))
+        .author(env!("CARGO_PKG_AUTHORS"))
+        .about(env!("CARGO_PKG_DESCRIPTION"))
         .subcommands(vct![
-            SubCommand::with_name("config")
-            .arg_from_usage("-a, --server-addr=[ADDR] '服务端的监听地址'")
-            .arg_from_usage("-p, --server-port=[PORT] '服务端的监听端口'")
-            .arg_from_usage("-n, --client-id=[NAME] '客户端别名'"),
-            SubCommand::with_name("status")
-            .arg_from_usage("-c, --client '查看客户端状态'")
-            .arg_from_usage("-s, --server '查看服务端状态'"),
-            SubCommand::with_name("env").subcommands(vct![
-                SubCommand::with_name("add")
-                    .arg(Arg::with_name("ENV").required(true).help("待创建的环境名称."))
-                    .arg_from_usage("-n, --deny-outgoing '禁止虚拟机对外连网'")
-                    .arg_from_usage("-l, --life-time=[TIME] '虚拟机的生命周期, 单位: 秒'")
-                    .arg_from_usage("-C, --cpu-num=[CPU_SIZE] '虚拟机的 CPU 核心数量'")
-                    .arg_from_usage("-M, --mem-size=[MEM_SIZE] '虚拟机的内存容量, 单位: MB'")
-                    .arg_from_usage("-D, --disk-size=[DISK_SIZE] '虚拟机的磁盘容量, 单位: MB'")
-                    .arg_from_usage("-d, --dup-each=[NUM] '每种虚拟机类型启动的实例数量'")
-                    .arg_from_usage("-s, --os-prefix=[OS]... '虚拟机的系统, 如: CentOS7.x 等'")
-                    .arg_from_usage("-p, --vm-port=[PORT]... '虚拟机需要开放的网络端口'")
-                    .arg_from_usage("--same-uuid '所有虚拟机都使用同一个 UUID'"),
-                SubCommand::with_name("del")
-                .arg(
-                    Arg::with_name("ENV")
+            Command::new("config")
+            .arg(Arg::new("server-addr")
+                .short('a')
+                .long("server-addr")
+                .value_name("ADDR")
+                .help("Server listening address"))
+            .arg(Arg::new("server-port")
+                .short('p')
+                .long("server-port")
+                .value_name("PORT")
+                .help("Server listening port"))
+            .arg(Arg::new("client-id")
+                .short('n')
+                .long("client-id")
+                .value_name("NAME")
+                .help("Client alias")),
+            Command::new("status")
+            .arg(Arg::new("client")
+                .short('c')
+                .long("client")
+                .action(clap::ArgAction::SetTrue)
+                .help("View client status"))
+            .arg(Arg::new("server")
+                .short('s')
+                .long("server")
+                .action(clap::ArgAction::SetTrue)
+                .help("View server status")),
+            Command::new("env").subcommands(vct![
+                Command::new("add")
+                    .arg(Arg::new("ENV")
                         .required(true)
-                        .multiple(true)
-                        .help("一个或多个环境名称.")
-                ),
-                SubCommand::with_name("stop")
-                .arg(
-                    Arg::with_name("ENV")
+                        .help("Name of environment to be created"))
+                    .arg(Arg::new("deny-outgoing")
+                        .short('n')
+                        .long("deny-outgoing")
+                        .action(clap::ArgAction::SetTrue)
+                        .help("Prohibit virtual machine from connecting to external network"))
+                    .arg(Arg::new("life-time")
+                        .short('l')
+                        .long("life-time")
+                        .value_name("TIME")
+                        .help("Virtual machine lifecycle, unit: seconds"))
+                    .arg(Arg::new("cpu-num")
+                        .short('C')
+                        .long("cpu-num")
+                        .value_name("CPU_SIZE")
+                        .help("Number of CPU cores for virtual machine"))
+                    .arg(Arg::new("mem-size")
+                        .short('M')
+                        .long("mem-size")
+                        .value_name("MEM_SIZE")
+                        .help("Virtual machine memory capacity, unit: MB"))
+                    .arg(Arg::new("disk-size")
+                        .short('D')
+                        .long("disk-size")
+                        .value_name("DISK_SIZE")
+                        .help("Virtual machine disk capacity, unit: MB"))
+                    .arg(Arg::new("dup-each")
+                        .short('d')
+                        .long("dup-each")
+                        .value_name("NUM")
+                        .help("Number of instances to start for each virtual machine type"))
+                    .arg(Arg::new("os-prefix")
+                        .short('s')
+                        .long("os-prefix")
+                        .value_name("OS")
+                        .action(clap::ArgAction::Append)
+                        .help("Virtual machine system, e.g: CentOS7.x etc"))
+                    .arg(Arg::new("vm-port")
+                        .short('p')
+                        .long("vm-port")
+                        .value_name("PORT")
+                        .action(clap::ArgAction::Append)
+                        .help("Network ports that virtual machine needs to open"))
+                    .arg(Arg::new("same-uuid")
+                        .long("same-uuid")
+                        .action(clap::ArgAction::SetTrue)
+                        .help("All virtual machines use the same UUID")),
+                Command::new("del")
+                .arg(Arg::new("ENV")
                         .required(true)
-                        .multiple(true)
-                        .help("一个或多个环境名称.")
+                        .action(clap::ArgAction::Append)
+                        .help("One or more environment names")
                 ),
-                SubCommand::with_name("start")
-                .arg(
-                    Arg::with_name("ENV")
+                Command::new("stop")
+                .arg(Arg::new("ENV")
                         .required(true)
-                        .multiple(true)
-                        .help("一个或多个环境名称.")
+                        .action(clap::ArgAction::Append)
+                        .help("One or more environment names")
                 ),
-                SubCommand::with_name("list"),
-                SubCommand::with_name("listall"),
-                SubCommand::with_name("show")
-                .arg(
-                    Arg::with_name("ENV")
+                Command::new("start")
+                .arg(Arg::new("ENV")
                         .required(true)
-                        .multiple(true)
-                        .help("一个或多个环境名称.")
+                        .action(clap::ArgAction::Append)
+                        .help("One or more environment names")
                 ),
-                SubCommand::with_name("update")
-                    .arg(
-                        Arg::with_name("ENV")
+                Command::new("list"),
+                Command::new("listall"),
+                Command::new("show")
+                .arg(Arg::new("ENV")
+                        .required(true)
+                        .action(clap::ArgAction::Append)
+                        .help("One or more environment names")
+                ),
+                Command::new("update")
+                    .arg(Arg::new("ENV")
                             .required(true)
-                            .multiple(true)
-                            .help("一个或多个环境名称.")
+                            .action(clap::ArgAction::Append)
+                            .help("One or more environment names")
                     )
-                    .arg_from_usage("--SSSS '指定任意生命周期'")
-                    .arg_from_usage("-l, --life-time=[TIME] '新的生命周期'")
-                    .arg_from_usage("-C, --cpu-num=[CPU_SIZE] '新的 CPU 数量'")
-                    .arg_from_usage("-M, --mem-size=[MEM_SIZE] '新的内存容量, 单位: MB'")
-                    .arg_from_usage("-p, --vm-port=[PORT]... '新的网络端口集合(全量替换, 非增量计算)'")
-                    .arg_from_usage("-n, --deny-outgoing '禁止虚拟机对外连网'")
-                    .arg_from_usage("-y, --allow-outgoing '允许虚拟机对外连网'")
-                    .args_from_usage("--kick-dead '清除所有失去响应的 VM 实例'")
-                    .args_from_usage("--kick-vm=[VM_ID]... '待剔除的 VM 的 ID'")
-                    .args_from_usage("--kick-os=[OS_PREFIX]... '待剔除的系统名称前缀'"),
-                SubCommand::with_name("get")
-                    .arg_from_usage("--use-ssh '使用 SSH 协议通信'")
-                    .arg_from_usage("-f, --file-path=[PATH] '文件在远程的路径'")
-                    .arg_from_usage("-t, --time-out=[TIME] '可执行的最长时间, 单位: 秒'")
-                    .arg_from_usage("-s, --os-prefix=[OS]... '按系统名称前缀筛选'")
-                    .arg_from_usage("-m, --vm-id=[VM]... '按 VmId 精确筛选'")
-                    .arg(
-                        Arg::with_name("ENV")
+                    .arg(Arg::new("SSSS")
+                        .long("SSSS")
+                        .action(clap::ArgAction::SetTrue)
+                        .help("Specify arbitrary lifecycle"))
+                    .arg(Arg::new("life-time")
+                        .short('l')
+                        .long("life-time")
+                        .value_name("TIME")
+                        .help("New lifecycle"))
+                    .arg(Arg::new("cpu-num")
+                        .short('C')
+                        .long("cpu-num")
+                        .value_name("CPU_SIZE")
+                        .help("New CPU count"))
+                    .arg(Arg::new("mem-size")
+                        .short('M')
+                        .long("mem-size")
+                        .value_name("MEM_SIZE")
+                        .help("New memory capacity, unit: MB"))
+                    .arg(Arg::new("vm-port")
+                        .short('p')
+                        .long("vm-port")
+                        .value_name("PORT")
+                        .action(clap::ArgAction::Append)
+                        .help("New network port set (full replacement, not incremental)"))
+                    .arg(Arg::new("deny-outgoing")
+                        .short('n')
+                        .long("deny-outgoing")
+                        .action(clap::ArgAction::SetTrue)
+                        .help("Prohibit virtual machine from connecting to external network"))
+                    .arg(Arg::new("allow-outgoing")
+                        .short('y')
+                        .long("allow-outgoing")
+                        .action(clap::ArgAction::SetTrue)
+                        .help("Allow virtual machine to connect to external network"))
+                    .arg(Arg::new("kick-dead")
+                        .long("kick-dead")
+                        .action(clap::ArgAction::SetTrue)
+                        .help("Remove all unresponsive VM instances"))
+                    .arg(Arg::new("kick-vm")
+                        .long("kick-vm")
+                        .value_name("VM_ID")
+                        .action(clap::ArgAction::Append)
+                        .help("ID of VM to be kicked"))
+                    .arg(Arg::new("kick-os")
+                        .long("kick-os")
+                        .value_name("OS_PREFIX")
+                        .action(clap::ArgAction::Append)
+                        .help("OS prefix to be removed")),
+                Command::new("get")
+                    .arg(Arg::new("use-ssh")
+                        .long("use-ssh")
+                        .action(clap::ArgAction::SetTrue)
+                        .help("Use SSH protocol for communication"))
+                    .arg(Arg::new("file-path")
+                        .short('f')
+                        .long("file-path")
+                        .value_name("PATH")
+                        .help("File path on remote system"))
+                    .arg(Arg::new("time-out")
+                        .short('t')
+                        .long("time-out")
+                        .value_name("TIME")
+                        .help("Maximum execution time in seconds"))
+                    .arg(Arg::new("os-prefix")
+                        .short('s')
+                        .long("os-prefix")
+                        .value_name("OS")
+                        .action(clap::ArgAction::Append)
+                        .help("Filter by OS name prefix"))
+                    .arg(Arg::new("vm-id")
+                        .short('m')
+                        .long("vm-id")
+                        .value_name("VM")
+                        .action(clap::ArgAction::Append)
+                        .help("Filter by exact VM ID"))
+                    .arg(Arg::new("ENV")
                             .required(true)
-                            .help("一个或多个环境名称.")
-                            .multiple(true)
+                            .help("One or more environment names")
+                            .action(clap::ArgAction::Append)
                     ),
-                SubCommand::with_name("push")
-                    .arg_from_usage("--use-ssh '使用 SSH 协议通信'")
-                    .arg_from_usage("-f, --file-path=[PATH] '文件在本地的路径'")
-                    .arg_from_usage("-t, --time-out=[TIME] '可执行的最长时间, 单位: 秒'")
-                    .arg_from_usage("-s, --os-prefix=[OS]... '按系统名称前缀筛选'")
-                    .arg_from_usage("-m, --vm-id=[VM]... '按 VmId 精确筛选'")
-                    .arg(
-                        Arg::with_name("ENV")
+                Command::new("push")
+                    .arg(Arg::new("use-ssh")
+                        .long("use-ssh")
+                        .action(clap::ArgAction::SetTrue)
+                        .help("Use SSH protocol for communication"))
+                    .arg(Arg::new("file-path")
+                        .short('f')
+                        .long("file-path")
+                        .value_name("PATH")
+                        .help("Local file path"))
+                    .arg(Arg::new("time-out")
+                        .short('t')
+                        .long("time-out")
+                        .value_name("TIME")
+                        .help("Maximum execution time in seconds"))
+                    .arg(Arg::new("os-prefix")
+                        .short('s')
+                        .long("os-prefix")
+                        .value_name("OS")
+                        .action(clap::ArgAction::Append)
+                        .help("Filter by OS name prefix"))
+                    .arg(Arg::new("vm-id")
+                        .short('m')
+                        .long("vm-id")
+                        .value_name("VM")
+                        .action(clap::ArgAction::Append)
+                        .help("Filter by exact VM ID"))
+                    .arg(Arg::new("ENV")
                             .required(true)
-                            .help("一个或多个环境名称.")
-                            .multiple(true)
+                            .help("One or more environment names")
+                            .action(clap::ArgAction::Append)
                     ),
-                SubCommand::with_name("run")
-                    .arg_from_usage("--use-ssh '使用 SSH 协议通信'")
-                    .arg_from_usage("-c, --cmd=[CMD] 'SHELL 命令'")
-                    .arg_from_usage("-i, --interactive '交互式串行操作'")
-                    .arg_from_usage("-x, --config-hawk '注册到 HAWK 监控系统'")
-                    .arg_from_usage("-f, --script=[PATH] '脚本文件的本地路径'")
-                    .arg_from_usage("-t, --time-out=[TIME] '可执行的最长时间, 单位: 秒'")
-                    .arg_from_usage("-s, --os-prefix=[OS]... '按系统名称前缀筛选'")
-                    .arg_from_usage("-m, --vm-id=[VM]... '按 VmId 精确筛选'")
-                    .arg(
-                        Arg::with_name("ENV")
+                Command::new("run")
+                    .arg(Arg::new("use-ssh")
+                        .long("use-ssh")
+                        .action(clap::ArgAction::SetTrue)
+                        .help("Use SSH protocol for communication"))
+                    .arg(Arg::new("cmd")
+                        .short('c')
+                        .long("cmd")
+                        .value_name("CMD")
+                        .help("Shell command"))
+                    .arg(Arg::new("interactive")
+                        .short('i')
+                        .long("interactive")
+                        .action(clap::ArgAction::SetTrue)
+                        .help("Interactive serial operation"))
+                    .arg(Arg::new("config-hawk")
+                        .short('x')
+                        .long("config-hawk")
+                        .action(clap::ArgAction::SetTrue)
+                        .help("Register to HAWK monitoring system"))
+                    .arg(Arg::new("script")
+                        .short('f')
+                        .long("script")
+                        .value_name("PATH")
+                        .help("Local path to script file"))
+                    .arg(Arg::new("time-out")
+                        .short('t')
+                        .long("time-out")
+                        .value_name("TIME")
+                        .help("Maximum execution time in seconds"))
+                    .arg(Arg::new("os-prefix")
+                        .short('s')
+                        .long("os-prefix")
+                        .value_name("OS")
+                        .action(clap::ArgAction::Append)
+                        .help("Filter by OS name prefix"))
+                    .arg(Arg::new("vm-id")
+                        .short('m')
+                        .long("vm-id")
+                        .value_name("VM")
+                        .action(clap::ArgAction::Append)
+                        .help("Filter by exact VM ID"))
+                    .arg(Arg::new("ENV")
                             .required(true)
-                            .help("一个或多个环境名称.")
-                            .multiple(true)
+                            .help("One or more environment names")
+                            .action(clap::ArgAction::Append)
                     ),
             ])
         ])
@@ -191,17 +353,17 @@ pub fn parse_and_exec() -> Result<()> {
     }
 }
 
-/// 解析 `tt env add ...`
+/// Parse `tt env add ...`
 fn env_add<'a>(m: &'a ArgMatches<'a>) -> Result<EnvAdd<'a>> {
     match (
-        m.value_of("ENV"),
-        m.values_of("os-prefix"),
-        m.values_of("vm-port"),
-        m.value_of("life-time"),
-        m.value_of("cpu-num"),
-        m.value_of("mem-size"),
-        m.value_of("disk-size"),
-        m.value_of("dup-each"),
+        m.get_one::<String>("ENV"),
+        m.get_many::<String>("os-prefix"),
+        m.get_many::<String>("vm-port"),
+        m.get_one::<String>("life-time"),
+        m.get_one::<String>("cpu-num"),
+        m.get_one::<String>("mem-size"),
+        m.get_one::<String>("disk-size"),
+        m.get_one::<String>("dup-each"),
     ) {
         (
             Some(env_id),
@@ -214,7 +376,7 @@ fn env_add<'a>(m: &'a ArgMatches<'a>) -> Result<EnvAdd<'a>> {
             dup_each,
         ) => Ok(EnvAdd {
             env_id,
-            os_prefix: os_prefix.collect(),
+            os_prefix: os_prefix.map(|v| v.cloned().collect()).unwrap_or_default(),
             vm_port: {
                 let mut port_set = vct![];
                 if let Some(vm_port) = vm_port {
@@ -233,67 +395,67 @@ fn env_add<'a>(m: &'a ArgMatches<'a>) -> Result<EnvAdd<'a>> {
             mem_size: option_num_parse!(mem_size, 0, u16),
             disk_size: option_num_parse!(disk_size, 0, u32),
             dup_each: option_num_parse!(dup_each, 0, u16),
-            deny_outgoing: m.is_present("deny-outgoing"),
-            rand_uuid: !m.is_present("same-uuid"),
+            deny_outgoing: m.get_flag("deny-outgoing"),
+            rand_uuid: !m.get_flag("same-uuid"),
         }),
         _ => Err(eg!()),
     }
 }
 
-/// 解析 `tt env del ...`
+/// Parse `tt env del ...`
 fn env_del<'a>(m: &'a ArgMatches<'a>) -> Result<EnvDel<'a>> {
-    if let Some(env_set) = m.values_of("ENV") {
+    if let Some(env_set) = m.get_many::<String>("ENV") {
         Ok(EnvDel {
-            env_set: env_set.collect(),
+            env_set: env_set.cloned().collect(),
         })
     } else {
-        Err(eg!("没有指定 ENV"))
+        Err(eg!("ENV not specified"))
     }
 }
 
-/// 解析 `tt env stop ...`
+/// Parse `tt env stop ...`
 fn env_stop<'a>(m: &'a ArgMatches<'a>) -> Result<EnvStop<'a>> {
-    if let Some(env_set) = m.values_of("ENV") {
+    if let Some(env_set) = m.get_many::<String>("ENV") {
         Ok(EnvStop {
-            env_set: env_set.collect(),
+            env_set: env_set.cloned().collect(),
         })
     } else {
-        Err(eg!("没有指定 ENV"))
+        Err(eg!("ENV not specified"))
     }
 }
 
-/// 解析 `tt env start ...`
+/// Parse `tt env start ...`
 fn env_start<'a>(m: &'a ArgMatches<'a>) -> Result<EnvStart<'a>> {
-    if let Some(env_set) = m.values_of("ENV") {
+    if let Some(env_set) = m.get_many::<String>("ENV") {
         Ok(EnvStart {
-            env_set: env_set.collect(),
+            env_set: env_set.cloned().collect(),
         })
     } else {
-        Err(eg!("没有指定 ENV"))
+        Err(eg!("ENV not specified"))
     }
 }
 
-/// 解析 `tt env show ...`
+/// Parse `tt env show ...`
 fn env_show<'a>(m: &'a ArgMatches<'a>) -> Result<EnvShow<'a>> {
-    if let Some(env_set) = m.values_of("ENV") {
+    if let Some(env_set) = m.get_many::<String>("ENV") {
         Ok(EnvShow {
-            env_set: env_set.collect(),
+            env_set: env_set.cloned().collect(),
         })
     } else {
-        Err(eg!("没有指定 ENV"))
+        Err(eg!("ENV not specified"))
     }
 }
 
-/// 解析 `tt env update ...`
+/// Parse `tt env update ...`
 fn env_update<'a>(m: &'a ArgMatches<'a>) -> Result<EnvUpdate<'a>> {
     match (
-        m.value_of("life-time"),
-        m.values_of("kick-vm"),
-        m.values_of("kick-os"),
-        m.value_of("cpu-num"),
-        m.value_of("mem-size"),
-        m.values_of("vm-port"),
-        m.values_of("ENV"),
+        m.get_one::<String>("life-time"),
+        m.get_many::<String>("kick-vm"),
+        m.get_many::<String>("kick-os"),
+        m.get_one::<String>("cpu-num"),
+        m.get_one::<String>("mem-size"),
+        m.get_many::<String>("vm-port"),
+        m.get_many::<String>("ENV"),
     ) {
         (_, _, _, _, _, _, None) => Err(eg!("没有指定 ENV")),
         (
@@ -305,8 +467,8 @@ fn env_update<'a>(m: &'a ArgMatches<'a>) -> Result<EnvUpdate<'a>> {
             vm_port,
             Some(env_set),
         ) => Ok(EnvUpdate {
-            env_set: env_set.collect(),
-            kick_dead: m.is_present("kick-dead"),
+            env_set: env_set.cloned().collect(),
+            kick_dead: m.get_flag("kick-dead"),
             vm_id: if let Some(i) = vm_id {
                 let mut res = vct![];
                 for id in i {
@@ -317,7 +479,7 @@ fn env_update<'a>(m: &'a ArgMatches<'a>) -> Result<EnvUpdate<'a>> {
                 vct![]
             },
             os_prefix: os_prefix
-                .map(|os| os.map(|o| o.to_owned()).collect())
+                .map(|os| os.cloned().collect())
                 .unwrap_or_default(),
             cpu_num: if let Some(n) = cpu_num {
                 Some(n.parse::<u8>().c(d!(not_num!(n)))?)
@@ -343,10 +505,10 @@ fn env_update<'a>(m: &'a ArgMatches<'a>) -> Result<EnvUpdate<'a>> {
             } else {
                 None
             },
-            is_fucker: m.is_present("SSSS"),
-            deny_outgoing: if m.is_present("deny-outgoing") {
+            is_fucker: m.get_flag("SSSS"),
+            deny_outgoing: if m.get_flag("deny-outgoing") {
                 Some(true)
-            } else if m.is_present("allow-outgoing") {
+            } else if m.get_flag("allow-outgoing") {
                 Some(false)
             } else {
                 None
@@ -355,28 +517,28 @@ fn env_update<'a>(m: &'a ArgMatches<'a>) -> Result<EnvUpdate<'a>> {
     }
 }
 
-/// 解析 `tt env get ...`
+/// Parse `tt env get ...`
 fn env_get<'a>(m: &'a ArgMatches<'a>) -> Result<EnvGet<'a>> {
-    // 默认 10s 超时
+    // Default 10s timeout
     const TIMEOUT: &str = "10";
 
     match (
-        m.value_of("file-path"),
-        m.value_of("time-out"),
-        m.values_of("os-prefix"),
-        m.values_of("vm-id"),
-        m.values_of("ENV"),
+        m.get_one::<String>("file-path"),
+        m.get_one::<String>("time-out"),
+        m.get_many::<String>("os-prefix"),
+        m.get_many::<String>("vm-id"),
+        m.get_many::<String>("ENV"),
     ) {
-        (None, _, _, _, _) => Err(eg!("没有指定 --file-path")),
+        (None, _, _, _, _) => Err(eg!("--file-path not specified")),
         (_, _, _, _, None) => Err(eg!("没有指定 ENV")),
         (Some(file_path), timeout, osset, idset, Some(env_set)) => {
             Ok(EnvGet {
-                use_ssh: m.is_present("use-ssh"),
+                use_ssh: m.get_flag("use-ssh"),
                 file_path,
-                time_out: timeout.unwrap_or(TIMEOUT).parse::<u64>().c(d!())?,
-                env_set: env_set.collect(),
+                time_out: timeout.map(|s| s.as_str()).unwrap_or(TIMEOUT).parse::<u64>().c(d!())?,
+                env_set: env_set.cloned().collect(),
                 filter_os_prefix: osset
-                    .map(|os| os.collect())
+                    .map(|os| os.cloned().collect())
                     .unwrap_or_default(),
                 filter_vm_id: if let Some(idset) = idset {
                     let mut res = vct![];
@@ -392,28 +554,28 @@ fn env_get<'a>(m: &'a ArgMatches<'a>) -> Result<EnvGet<'a>> {
     }
 }
 
-/// 解析 `tt env push ...`
+/// Parse `tt env push ...`
 fn env_push<'a>(m: &'a ArgMatches<'a>) -> Result<EnvPush<'a>> {
-    // 默认 10s 超时
+    // Default 10s timeout
     const TIMEOUT: &str = "10";
 
     match (
-        m.value_of("file-path"),
-        m.value_of("time-out"),
-        m.values_of("os-prefix"),
-        m.values_of("vm-id"),
-        m.values_of("ENV"),
+        m.get_one::<String>("file-path"),
+        m.get_one::<String>("time-out"),
+        m.get_many::<String>("os-prefix"),
+        m.get_many::<String>("vm-id"),
+        m.get_many::<String>("ENV"),
     ) {
-        (None, _, _, _, _) => Err(eg!("没有指定 --file-path")),
+        (None, _, _, _, _) => Err(eg!("--file-path not specified")),
         (_, _, _, _, None) => Err(eg!("没有指定 ENV")),
         (Some(file_path), timeout, osset, idset, Some(env_set)) => {
             Ok(EnvPush {
-                use_ssh: m.is_present("use-ssh"),
+                use_ssh: m.get_flag("use-ssh"),
                 file_path: check_file_path(file_path).c(d!())?,
-                time_out: timeout.unwrap_or(TIMEOUT).parse::<u64>().c(d!())?,
-                env_set: env_set.collect(),
+                time_out: timeout.map(|s| s.as_str()).unwrap_or(TIMEOUT).parse::<u64>().c(d!())?,
+                env_set: env_set.cloned().collect(),
                 filter_os_prefix: osset
-                    .map(|os| os.collect())
+                    .map(|os| os.cloned().collect())
                     .unwrap_or_default(),
                 filter_vm_id: if let Some(idset) = idset {
                     let mut res = vct![];
@@ -429,17 +591,17 @@ fn env_push<'a>(m: &'a ArgMatches<'a>) -> Result<EnvPush<'a>> {
     }
 }
 
-/// 解析 `tt env run ...`
+/// Parse `tt env run ...`
 fn env_run<'a>(m: &'a ArgMatches<'a>) -> Result<EnvRun<'a>> {
-    // 默认 3s 超时
+    // Default 3s timeout
     const TIMEOUT: &str = "3";
 
-    if let Some(env_set) = m.values_of("ENV") {
+    if let Some(env_set) = m.get_many::<String>("ENV") {
         let filter_os_prefix = m
-            .values_of("os-prefix")
-            .map(|os| os.collect())
+            .get_many::<String>("os-prefix")
+            .map(|os| os.cloned().collect())
             .unwrap_or_default();
-        let filter_vm_id = if let Some(idset) = m.values_of("vm-id") {
+        let filter_vm_id = if let Some(idset) = m.get_many::<String>("vm-id") {
             let mut res = vct![];
             for id in idset.into_iter() {
                 res.push(id.parse::<i32>().c(d!(not_num!(id)))?);
@@ -449,25 +611,26 @@ fn env_run<'a>(m: &'a ArgMatches<'a>) -> Result<EnvRun<'a>> {
             vct![]
         };
         let to = m
-            .value_of("time-out")
+            .get_one::<String>("time-out")
+            .map(|s| s.as_str())
             .unwrap_or(TIMEOUT)
             .parse::<u64>()
             .c(d!())?;
 
-        let env_set = env_set.collect();
-        if m.is_present("config-hawk") {
+        let env_set = env_set.cloned().collect();
+        if m.get_flag("config-hawk") {
             Ok(EnvRun {
                 cmd: "",
                 script: "",
                 time_out: to,
                 env_set,
-                use_ssh: m.is_present("use-ssh"),
+                use_ssh: m.get_flag("use-ssh"),
                 interactive: false,
                 config_hawk: true,
                 filter_vm_id,
                 filter_os_prefix,
             })
-        } else if m.is_present("interactive") {
+        } else if m.get_flag("interactive") {
             Ok(EnvRun {
                 cmd: "",
                 script: "",
@@ -480,14 +643,14 @@ fn env_run<'a>(m: &'a ArgMatches<'a>) -> Result<EnvRun<'a>> {
                 filter_os_prefix,
             })
         } else {
-            match (m.value_of("cmd"), m.value_of("script")) {
-                (None, None) => Err(eg!("没有指定 --cmd 或 --script")),
+            match (m.get_one::<String>("cmd"), m.get_one::<String>("script")) {
+                (None, None) => Err(eg!("Neither --cmd nor --script specified")),
                 (cmd, Some(script)) => Ok(EnvRun {
-                    cmd: cmd.unwrap_or(""),
+                    cmd: cmd.map(|s| s.as_str()).unwrap_or(""),
                     script: check_file_path(script).c(d!())?,
                     time_out: to,
                     env_set,
-                    use_ssh: m.is_present("use-ssh"),
+                    use_ssh: m.get_flag("use-ssh"),
                     interactive: false,
                     config_hawk: false,
                     filter_vm_id,
@@ -498,7 +661,7 @@ fn env_run<'a>(m: &'a ArgMatches<'a>) -> Result<EnvRun<'a>> {
                     script: "",
                     time_out: to,
                     env_set,
-                    use_ssh: m.is_present("use-ssh"),
+                    use_ssh: m.get_flag("use-ssh"),
                     interactive: false,
                     config_hawk: false,
                     filter_vm_id,
@@ -507,18 +670,18 @@ fn env_run<'a>(m: &'a ArgMatches<'a>) -> Result<EnvRun<'a>> {
             }
         }
     } else {
-        Err(eg!("没有指定 ENV"))
+        Err(eg!("ENV not specified"))
     }
 }
 
-/// 解析 `tt config ...`
+/// Parse `tt config ...`
 fn config<'a>(m: &'a ArgMatches<'a>) -> Result<Config<'a>> {
     match (
         m.value_of("server-addr"),
         m.value_of("server-port"),
         m.value_of("client-id"),
     ) {
-        (None, _, None) => Err(eg!("没有指定 --server-addr 或 --client-id")),
+        (None, _, None) => Err(eg!("Neither --server-addr nor --client-id specified")),
         (Some(server_addr), server_port, client_id) => Ok(Config {
             server_addr,
             server_port: option_num_parse!(server_port, 9527, u16),
@@ -532,7 +695,7 @@ fn config<'a>(m: &'a ArgMatches<'a>) -> Result<Config<'a>> {
     }
 }
 
-/// 确认目标的类型是文件
+/// Confirm that the target is a file
 #[inline(always)]
 fn check_file_path(path: &str) -> Result<&str> {
     if Path::new(path).is_file() {

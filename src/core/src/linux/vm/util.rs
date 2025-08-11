@@ -2,7 +2,7 @@
 //! # Utils for linux.
 //!
 
-use myutil::{err::*, *};
+use ruc::*;
 use nix::{
     mount::{self, MsFlags},
     sys::wait,

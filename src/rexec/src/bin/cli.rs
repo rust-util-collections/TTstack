@@ -2,43 +2,92 @@
 //! # A client-end implementation.
 //!
 
-use clap::{
-    crate_authors, crate_description, crate_name, crate_version, App,
-    ArgMatches, SubCommand,
-};
-use myutil::{err::*, *};
+use clap::{Arg, ArgMatches, Command};
+use ruc::*;
 use ttrexec::{
     client::{req_exec, req_transfer},
     common::{Direction, TransReq},
 };
 
 fn main() {
-    let m = App::new(crate_name!())
-        .version(crate_version!())
-        .author(crate_authors!())
-        .about(crate_description!())
+    let m = Command::new(env!("CARGO_PKG_NAME"))
+        .version(env!("CARGO_PKG_VERSION"))
+        .author(env!("CARGO_PKG_AUTHORS"))
+        .about(env!("CARGO_PKG_DESCRIPTION"))
         .subcommands(vct![
-            SubCommand::with_name("exec")
-                .arg_from_usage("-a, --server-addr=[ADDR] '服务端的监听地址.'")
-                .arg_from_usage("-p, --server-port=[PORT] '服务端的监听端口.'")
-                .arg_from_usage("-c, --remote-cmd=[CMD] '待执行的远程命令.'")
-                .arg_from_usage("-t, --time-out=[TIME] '执行超时时间.'"),
-            SubCommand::with_name("push")
-                .arg_from_usage("-a, --server-addr=[ADDR] '服务端的监听地址.'")
-                .arg_from_usage("-p, --server-port=[PORT] '服务端的监听端口.'")
-                .arg_from_usage(
-                    "-l, --local-path=[PATH] '客户端本地文件路径.'"
-                )
-                .arg_from_usage("-r, --remote-path=[PATH] '服务端文件路径.'")
-                .arg_from_usage("-t, --time-out=[TIME] '执行超时时间.'"),
-            SubCommand::with_name("get")
-                .arg_from_usage("-a, --server-addr=[ADDR] '服务端的监听地址.'")
-                .arg_from_usage("-p, --server-port=[PORT] '服务端的监听端口.'")
-                .arg_from_usage(
-                    "-l, --local-path=[PATH] '客户端本地文件路径.'"
-                )
-                .arg_from_usage("-r, --remote-path=[PATH] '服务端文件路径.'")
-                .arg_from_usage("-t, --time-out=[TIME] '执行超时时间.'"),
+            Command::new("exec")
+                .arg(Arg::new("server-addr")
+                    .short('a')
+                    .long("server-addr")
+                    .value_name("ADDR")
+                    .help("服务端的监听地址."))
+                .arg(Arg::new("server-port")
+                    .short('p')
+                    .long("server-port")
+                    .value_name("PORT")
+                    .help("服务端的监听端口."))
+                .arg(Arg::new("remote-cmd")
+                    .short('c')
+                    .long("remote-cmd")
+                    .value_name("CMD")
+                    .help("待执行的远程命令."))
+                .arg(Arg::new("time-out")
+                    .short('t')
+                    .long("time-out")
+                    .value_name("TIME")
+                    .help("执行超时时间.")),
+            Command::new("push")
+                .arg(Arg::new("server-addr")
+                    .short('a')
+                    .long("server-addr")
+                    .value_name("ADDR")
+                    .help("服务端的监听地址."))
+                .arg(Arg::new("server-port")
+                    .short('p')
+                    .long("server-port")
+                    .value_name("PORT")
+                    .help("服务端的监听端口."))
+                .arg(Arg::new("local-path")
+                    .short('l')
+                    .long("local-path")
+                    .value_name("PATH")
+                    .help("客户端本地文件路径."))
+                .arg(Arg::new("remote-path")
+                    .short('r')
+                    .long("remote-path")
+                    .value_name("PATH")
+                    .help("服务端文件路径."))
+                .arg(Arg::new("time-out")
+                    .short('t')
+                    .long("time-out")
+                    .value_name("TIME")
+                    .help("执行超时时间.")),
+            Command::new("get")
+                .arg(Arg::new("server-addr")
+                    .short('a')
+                    .long("server-addr")
+                    .value_name("ADDR")
+                    .help("服务端的监听地址."))
+                .arg(Arg::new("server-port")
+                    .short('p')
+                    .long("server-port")
+                    .value_name("PORT")
+                    .help("服务端的监听端口."))
+                .arg(Arg::new("local-path")
+                    .short('l')
+                    .long("local-path")
+                    .value_name("PATH")
+                    .help("客户端本地文件路径."))
+                .arg(Arg::new("remote-path")
+                    .short('r')
+                    .long("remote-path")
+                    .value_name("PATH")
+                    .help("服务端文件路径."))
+                .arg(Arg::new("time-out")
+                    .short('t')
+                    .long("time-out")
+                    .value_name("TIME")
+                    .help("执行超时时间.")),
         ])
         .get_matches();
 
@@ -55,11 +104,11 @@ fn parse_and_exec(m: ArgMatches) -> Result<()> {
     macro_rules! trans {
         ($m: expr, $drct: tt) => {
             match (
-                $m.value_of("server-addr"),
-                $m.value_of("server-port"),
-                $m.value_of("local-path"),
-                $m.value_of("remote-path"),
-                $m.value_of("time-out"),
+                $m.get_one::<String>("server-addr"),
+                $m.get_one::<String>("server-port"),
+                $m.get_one::<String>("local-path"),
+                $m.get_one::<String>("remote-path"),
+                $m.get_one::<String>("time-out"),
             ) {
                 (
                     Some(addr),
@@ -69,7 +118,7 @@ fn parse_and_exec(m: ArgMatches) -> Result<()> {
                     time_out,
                 ) => {
                     let servaddr =
-                        format!("{}:{}", addr, port.unwrap_or("22000"));
+                        format!("{}:{}", addr, port.map(|s| s.as_str()).unwrap_or("22000"));
                     TransReq::new(Direction::$drct, local_path, remote_path)
                         .c(d!())
                         .and_then(|req| {
@@ -97,12 +146,12 @@ fn parse_and_exec(m: ArgMatches) -> Result<()> {
     match m.subcommand() {
         ("exec", Some(exec_m)) => {
             match (
-                exec_m.value_of("server-addr"),
-                exec_m.value_of("server-port"),
-                exec_m.value_of("remote-cmd"),
+                exec_m.get_one::<String>("server-addr"),
+                exec_m.get_one::<String>("server-port"),
+                exec_m.get_one::<String>("remote-cmd"),
             ) {
                 (Some(addr), port, Some(cmd)) => req_exec(
-                    &format!("{}:{}", addr, port.unwrap_or("22000")),
+                    &format!("{}:{}", addr, port.map(|s| s.as_str()).unwrap_or("22000")),
                     cmd,
                 )
                 .c(d!())

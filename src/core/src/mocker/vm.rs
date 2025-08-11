@@ -3,7 +3,7 @@
 //!
 
 use crate::Vm;
-use myutil::err::*;
+use ruc::*;
 
 pub(crate) fn start(_: &Vm) -> Result<()> {
     Ok(())

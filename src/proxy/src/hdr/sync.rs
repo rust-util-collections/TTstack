@@ -1,25 +1,25 @@
 //!
-//! 定时同步各 Slave Server 的资源信息
+//! Periodically synchronize resource information of various Slave Servers
 //!
 
 use super::*;
 use crate::{fwd_to_slave, CFG};
 use async_std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use nix::sys::socket::{InetAddr, SockAddr};
+use nix::sys::socket::{SockaddrIn, SockaddrStorage};
 use std::{thread, time::Duration};
 use ttserver_def::*;
 
-// 每秒同步一次
+// Synchronize once per second
 const SYNC_ITV: u64 = 1;
 
 pub(crate) fn start_cron() {
-    // 一个空请求体即可
+    // An empty request body is sufficient
     let mut req = Req::new(0, format!("SYSTEM-CRON-{}", ts!()), "");
 
-    // mock 一个地址
+    // Mock an address
     let peeraddr = mock_addr();
 
-    // 向后台所有的 Slave Server 请求信息
+    // Request information from all background Slave Servers
     let addr_set = CFG.server_addr_set.clone();
 
     loop {
@@ -73,15 +73,15 @@ fn env_list_cb(r: &mut SlaveRes) {
             if let Some(slave) = base.get_mut(&new.0) {
                 slave.push(new.1);
             } else {
-                base.insert(new.0, vct![new.1]);
+                base.insert(new.0, vec![new.1]);
             }
             base
         });
 
-    // 无法连通的 Slave 在元信息保留,
-    // 是一种干扰, 只保留有效信息即可.
-    // 另, 若不全量替换, Slave 端到期自动被清理掉的 ENV,
-    // 会依然保留在 Proxy 中, 导致在创建同名 ENV 时出错.
+    // Unreachable Slaves remain in metadata,
+    // which is a distraction, only valid information should be retained.
+    // Additionally, if not fully replaced, ENVs automatically cleaned up on Slave side when expired,
+    // will still remain in Proxy, causing errors when creating ENVs with the same name.
     *ENV_MAP.write() = res;
 }
 

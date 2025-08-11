@@ -2,7 +2,7 @@
 //! # 基本类型定义
 //!
 
-use myutil::{err::*, *};
+use ruc::*;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 pub use ttcore_def::*;
@@ -11,7 +11,7 @@ pub use ttcore_def::*;
 pub const OPS_ID_LEN: usize = 4;
 
 /// 无法获取 uuid 时使用此默认 id
-pub const DEFAULT_REQ_ID: u64 = std::u64::MAX;
+pub const DEFAULT_REQ_ID: u64 = u64::MAX;
 
 /// uuid of req/resp
 pub type UUID = u64;
@@ -141,7 +141,7 @@ pub struct ReqAddEnv {
 }
 
 impl ReqAddEnv {
-    /// 自动添加 SSH/ttrexec 端口影射
+    /// auto add ssh port map
     pub fn set_ssh_port(&mut self) {
         let set = |data: &mut Vec<VmPort>| {
             data.push(SSH_PORT);
@@ -161,15 +161,15 @@ impl ReqAddEnv {
         }
     }
 
-    /// OS 前缀匹配不区分大小写
+    /// OS prefix matching is not case sensitive
     pub fn set_os_lowercase(&mut self) {
         self.os_prefix
             .iter_mut()
             .for_each(|os| *os = os.to_lowercase());
     }
 
-    /// 检查 dup 的数量是否超限
-    pub fn check_dup(&self) -> Result<u32> {
+    /// check if the number of `dup` is out of limit
+    pub fn check_dup(&self) -> ruc::Result<u32> {
         const DUP_MAX: u32 = 500;
         let dup_each = self.dup_each.unwrap_or(0);
         if DUP_MAX < dup_each {

@@ -21,7 +21,7 @@ pub(super) fn add_env(
     ops_id: usize,
     peeraddr: SockAddr,
     request: Vec<u8>,
-) -> Result<()> {
+) -> ruc::Result<()> {
     let mut req = serde_json::from_slice::<MyReq>(&request).c(d!())?;
     if ENV_MAP.read().get(&req.msg.env_id).is_some() {
         return Err(eg!("Aready exists!"));
@@ -36,7 +36,7 @@ pub(super) fn add_env(
             let supported_set = mem::take(&mut v.supported_list)
                 .into_iter()
                 .collect::<HashSet<_>>();
-            (k, v, vct![], supported_set)
+            (k, v, vec![], supported_set)
         })
         .collect::<Vec<_>>();
 
@@ -102,10 +102,10 @@ fn send_req(
     mut req: MyReq,
     peeraddr: SockAddr,
     jobs: Vec<(SocketAddr, Vec<VmCfgProxy>)>,
-) -> Result<()> {
+) -> ruc::Result<()> {
     let num_to_wait = jobs.len();
     let proxy_uuid = gen_proxy_uuid();
-    let cli_id = req.cli_id.take().unwrap_or_else(|| peeraddr.to_str());
+    let cli_id = req.cli_id.take().unwrap_or_else(|| peeraddr.to_string());
 
     register_resp_hdr(
         num_to_wait,
@@ -121,11 +121,11 @@ fn send_req(
     );
 
     // 清理不需要的字段, 减少网络数据量
-    req.msg.os_prefix = vct![];
+    req.msg.os_prefix = vec![];
     req.msg.cpu_num = None;
     req.msg.mem_size = None;
     req.msg.disk_size = None;
-    req.msg.port_set = vct![];
+    req.msg.port_set = vec![];
 
     let mut m;
     for (slave_addr, vmcfg) in jobs.into_iter() {

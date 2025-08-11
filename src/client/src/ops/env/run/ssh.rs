@@ -3,8 +3,8 @@
 //!
 
 use super::VmConnInfo;
-use crate::SSH_VM_KEY;
-use myutil::{err::*, *};
+use crate::{SSH_VM_KEY, genlog};
+use ruc::*;
 use nix::unistd::execv;
 use std::ffi::CString;
 use std::{
@@ -15,8 +15,8 @@ use std::{
 
 pub const USER: &str = "root";
 
-/// 执行外部的 ssh 命令,
-/// 收集远端的输出内容并返回之
+/// Execute external ssh command,
+/// Collect remote output content and return it
 #[allow(clippy::mutex_atomic)]
 pub(super) fn exec(
     remote_cmd: &str,
@@ -77,7 +77,7 @@ pub fn do_exec(cmd: &str, args: &[&str]) -> Result<Child> {
         .c(d!())
 }
 
-/// 串行执行 ssh 交互式操作
+/// Serial execution of SSH interactive operations
 #[allow(clippy::mutex_atomic)]
 pub(super) fn exec_interactive(vm_conn_info: Vec<VmConnInfo>) -> ! {
     pnk!(
@@ -97,7 +97,7 @@ pub(super) fn exec_interactive(vm_conn_info: Vec<VmConnInfo>) -> ! {
     panic!()
 }
 
-/// 生成交互式 ssh 串行命令集合
+/// Generate interactive SSH serial command set
 fn gen_interactive_cmds(vm_conn_info: &[VmConnInfo]) -> Result<CString> {
     let mut res = vct![];
     vm_conn_info.iter().for_each(|vci| {

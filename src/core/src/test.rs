@@ -1,7 +1,7 @@
 #![cfg(feature = "testmock")]
 
 use crate::{ImagePath, OsName};
-use myutil::{err::*, *};
+use ruc::*;
 use std::{collections::HashMap, fs};
 
 pub(super) fn get_os_info(

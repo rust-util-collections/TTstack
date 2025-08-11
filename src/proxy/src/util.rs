@@ -6,10 +6,10 @@ use async_std::{
     net::{SocketAddr, UdpSocket},
     task,
 };
-use myutil::{err::*, *};
+use ruc::{*, err::*};
 use nix::sys::socket::{
     bind, sendto, setsockopt, socket, sockopt, AddressFamily, MsgFlags,
-    SockAddr, SockFlag, SockType, UnixAddr,
+    SockaddrStorage, SockFlag, SockType, UnixAddr,
 };
 use serde::Serialize;
 use std::{
@@ -35,9 +35,9 @@ use ttutils::zlib;
 /// `man unix(7)` for more infomation.
 ///
 /// NOTE:
-/// 需要接收消息的 Unix Socket 必须显式绑定地址;
-/// 若以匿名身份发送, 则无法收到对方的回复消息.
-pub(crate) fn gen_uau_socket(addr: &[u8]) -> Result<(UdpSocket, SockAddr)> {
+/// Unix Socket that needs to receive messages must explicitly bind address;
+/// If sent anonymously, unable to receive reply messages from the other party.
+pub(crate) fn gen_uau_socket(addr: &[u8]) -> ruc::Result<(UdpSocket, SockAddr)> {
     let fd = socket(
         AddressFamily::Unix,
         SockType::Datagram,
@@ -55,7 +55,7 @@ pub(crate) fn gen_uau_socket(addr: &[u8]) -> Result<(UdpSocket, SockAddr)> {
     Ok((unsafe { UdpSocket::from_raw_fd(fd) }, sa))
 }
 
-/// 回送成功信息
+/// Send back success information
 #[macro_export(crate)]
 macro_rules! send_ok {
     ($uuid: expr, $msg: expr, $peeraddr: expr) => {
@@ -67,7 +67,7 @@ macro_rules! send_ok {
     };
 }
 
-/// 生成标志'成功'的回复体
+/// Generate reply body marking 'success'
 pub(crate) fn gen_resp_ok(uuid: u64, msg: impl Serialize) -> Resp {
     Resp {
         uuid,
@@ -76,7 +76,7 @@ pub(crate) fn gen_resp_ok(uuid: u64, msg: impl Serialize) -> Resp {
     }
 }
 
-/// 回送失败信息
+/// Send back failure information
 #[macro_export(crate)]
 macro_rules! send_err {
     ($uuid: expr, $err: expr, $peeraddr: expr) => {{
@@ -89,7 +89,7 @@ macro_rules! send_err {
         .c(d!(&log))
         .map(|_| p(eg!(log)))
     }};
-    // 顶层直接产生的错误, 不再进行内部转发
+    // Errors generated directly at the top level, no longer forwarded internally
     (@$uuid: expr, $err: expr, $peeraddr: expr) => {{
         let log = genlog($err);
         $crate::util::send_out(
@@ -102,7 +102,7 @@ macro_rules! send_err {
     }};
 }
 
-/// 生成标志'出错'的回复体
+/// Generate reply body marking 'error'
 pub(crate) fn gen_resp_err(uuid: u64, msg: &str) -> Resp {
     Resp {
         uuid,
@@ -111,13 +111,13 @@ pub(crate) fn gen_resp_err(uuid: u64, msg: &str) -> Resp {
     }
 }
 
-/// 回送信息至'外发中枢'
+/// Send information back to 'outbound hub'
 #[inline(always)]
 pub(crate) fn send_back(
     sock: RawFd,
     resp: Resp,
     peeraddr: SockAddr,
-) -> Result<()> {
+) -> ruc::Result<()> {
     serde_json::to_vec(&resp)
         .c(d!())
         .and_then(|resp| zlib::encode(&resp[..]).c(d!()))
@@ -128,13 +128,13 @@ pub(crate) fn send_back(
         })
 }
 
-/// 回送信息至客户端
+/// Send information back to client
 #[inline(always)]
 pub(crate) fn send_out(
     sock: &'static UdpSocket,
     resp: Resp,
     peeraddr: SocketAddr,
-) -> Result<()> {
+) -> ruc::Result<()> {
     serde_json::to_vec(&resp)
         .c(d!())
         .and_then(|resp| zlib::encode(&resp[..]).c(d!()))

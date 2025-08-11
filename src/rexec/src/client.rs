@@ -3,11 +3,9 @@
 //!
 
 use crate::{common::*, sendfile::sendfile};
-use myutil::{err::*, *};
-use nix::sys::{
-    socket::{self, InetAddr, MsgFlags, SockAddr},
-    uio::IoVec,
-};
+use ruc::*;
+use nix::sys::socket::{self, MsgFlags, SockaddrIn};
+use std::io::IoSlice;
 use std::{
     fs::{self, File},
     io::Write,
@@ -16,41 +14,41 @@ use std::{
     time::Duration,
 };
 
-/// 发送执行命令的请求至远端,
-/// - @ remote_addr: 远端地址, eg: "8.8.8.8:80"
-/// - @ cmd: 请求执行的命令, 直接交给 shell 解析并执行
-/// - @ wait_timeout: 等待远程返回结果的最长时间, 默认 10 秒
-pub fn req_exec<'a>(remote_addr: &'a str, cmd: &'a str) -> Result<Resp<'a>> {
+/// Send execution command request to remote,
+/// - @ remote_addr: remote address, eg: "8.8.8.8:80"
+/// - @ cmd: command to be executed, directly passed to shell for parsing and execution
+/// - @ wait_timeout: maximum time to wait for remote response, default 10 seconds
+pub fn req_exec<'a>(remote_addr: &'a str, cmd: &'a str) -> ruc::Result<Resp<'a>> {
     let socket = gen_udp_sock().c(d!())?;
     let sock = *socket;
-    let peeraddr = remote_addr
+    let peeraddr: SockaddrIn = remote_addr
         .parse::<SocketAddr>()
-        .c(d!())
-        .map(|addr| SockAddr::new_inet(InetAddr::from_std(&addr)))?;
+        .c(d!())?
+        .into();
     let req = cmd.as_bytes();
 
     socket::sendto(sock, &req, &peeraddr, MsgFlags::empty())
         .c(d!())
         .and_then(|_| {
-            let mut buf = vct![0; 4 * 4096];
+            let mut buf = vec![0; 4 * 4096];
             let recvd =
                 socket::recv(sock, &mut buf, MsgFlags::empty()).c(d!())?;
             serde_json::from_slice::<Resp>(&buf[..recvd]).c(d!())
         })
 }
 
-/// 双向互传文件
-/// - @ remote_addr: 远端地址, eg: "8.8.8.8:80"
-/// - @ request: 请求信息, 其中会标注传输方向
-/// - @ wait_timeout: 等待远程返回结果的最长时间, 默认 10 秒
+/// Bidirectional file transfer
+/// - @ remote_addr: remote address, eg: "8.8.8.8:80"
+/// - @ request: request information, which will indicate transfer direction
+/// - @ wait_timeout: maximum time to wait for remote response, default 10 seconds
 pub fn req_transfer<'a>(
     remote_addr: &'a str,
     request: TransReq,
     wait_timeout: Option<u64>,
-) -> Result<Resp<'a>> {
+) -> ruc::Result<Resp<'a>> {
     let addr_std = remote_addr.parse::<SocketAddr>().c(d!())?;
 
-    // 连接时间最长 2 秒
+    // Connection time at most 2 seconds
     let tcpstream =
         TcpStream::connect_timeout(&addr_std, Duration::from_secs(2))
             .c(d!())
@@ -61,33 +59,33 @@ pub fn req_transfer<'a>(
                     .map(|_| stream)
             })?;
 
-    // 单次读等待最多 3 秒
+    // Single read wait at most 3 seconds
     tcpstream
         .set_read_timeout(Some(Duration::from_secs(3)))
         .c(d!())?;
 
-    // 单次写等待最多 3 秒
+    // Single write wait at most 3 seconds
     tcpstream
         .set_write_timeout(Some(Duration::from_secs(3)))
         .c(d!())?;
 
-    // 接管 socket 的生命周期
+    // Take over socket lifecycle
     let socket = FileHdr::new(tcpstream.into_raw_fd());
     let sock = *socket;
 
     let req = serde_json::to_vec(&request).c(d!())?;
     let meta =
         format!("{d:>0w$}", d = req.len(), w = TRANS_META_WIDTH).into_bytes();
-    socket::sendmsg(
+    socket::sendmsg::<()>(
         sock,
-        &[IoVec::from_slice(&meta), IoVec::from_slice(&req)],
+        &[IoSlice::new(&meta), IoSlice::new(&req)],
         &[],
         MsgFlags::empty(),
         None,
     )
     .c(d!())?;
 
-    // 传送本地文件至远程
+    // Transfer local file to remote
     if Direction::Push == request.drct {
         let fd = FileHdr::new(
             File::open(request.local_file_path).c(d!())?.into_raw_fd(),
@@ -117,7 +115,7 @@ pub fn req_transfer<'a>(
     let recvd = socket::recv(sock, &mut buf, MsgFlags::empty()).c(d!())?;
     let resp = serde_json::from_slice::<Resp>(&buf[..recvd]).c(d!())?;
 
-    // 存储远程文件至本地
+    // Store remote file locally
     if Direction::Get == request.drct && 0 == resp.code {
         let mut siz = resp.file_size as usize;
         let mut file = fs::OpenOptions::new()

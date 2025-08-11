@@ -1,5 +1,5 @@
-use clap::{crate_authors, crate_description, crate_name, crate_version, App};
-use myutil::{err::*, *};
+use clap::{Arg, Command};
+use ruc::*;
 use std::{path::Path, process};
 use ttserver::cfg::Cfg;
 
@@ -10,29 +10,53 @@ fn main() {
 /// 解析命令行参数
 fn parse_cfg() -> Result<Cfg> {
     // 要添加 "--ignored" 等兼容 `cargo test` 的选项
-    let matches = App::new(crate_name!())
-        .version(crate_version!())
-        .author(crate_authors!())
-        .about(crate_description!())
-        .args_from_usage("--serv-addr=[ADDR] '服务监听地址.'")
-        .args_from_usage("--serv-port=[PORT] '服务监听端口.'")
-        .args_from_usage("--log-path=[PATH] '日志存储路径.'")
-        .args_from_usage("--image-path=[PATH] '镜像存放路径.'")
-        .args_from_usage("--cfgdb-path=[PATH] 'Env Config 存放路径.'")
-        .args_from_usage("--cpu-total=[NUM] '可以使用的 CPU 核心总数.'")
-        .args_from_usage("--mem-total=[SIZE] '可以使用的内存总量, 单位: MB.'")
-        .args_from_usage("--disk-total=[SIZE] '可以使用的磁盘总量, 单位: MB.'")
+    let matches = Command::new(env!("CARGO_PKG_NAME"))
+        .version(env!("CARGO_PKG_VERSION"))
+        .author(env!("CARGO_PKG_AUTHORS"))
+        .about(env!("CARGO_PKG_DESCRIPTION"))
+        .arg(Arg::new("serv-addr")
+            .long("serv-addr")
+            .value_name("ADDR")
+            .help("服务监听地址."))
+        .arg(Arg::new("serv-port")
+            .long("serv-port")
+            .value_name("PORT")
+            .help("服务监听端口."))
+        .arg(Arg::new("log-path")
+            .long("log-path")
+            .value_name("PATH")
+            .help("日志存储路径."))
+        .arg(Arg::new("image-path")
+            .long("image-path")
+            .value_name("PATH")
+            .help("镜像存放路径."))
+        .arg(Arg::new("cfgdb-path")
+            .long("cfgdb-path")
+            .value_name("PATH")
+            .help("Env Config 存放路径."))
+        .arg(Arg::new("cpu-total")
+            .long("cpu-total")
+            .value_name("NUM")
+            .help("可以使用的 CPU 核心总数."))
+        .arg(Arg::new("mem-total")
+            .long("mem-total")
+            .value_name("SIZE")
+            .help("可以使用的内存总量, 单位: MB."))
+        .arg(Arg::new("disk-total")
+            .long("disk-total")
+            .value_name("SIZE")
+            .help("可以使用的磁盘总量, 单位: MB."))
         .get_matches();
 
     match (
-        matches.value_of("serv-addr"),
-        matches.value_of("serv-port"),
-        matches.value_of("log-path"),
-        matches.value_of("image-path"),
-        matches.value_of("cfgdb-path"),
-        matches.value_of("cpu-total"),
-        matches.value_of("mem-total"),
-        matches.value_of("disk-total"),
+        matches.get_one::<String>("serv-addr"),
+        matches.get_one::<String>("serv-port"),
+        matches.get_one::<String>("log-path"),
+        matches.get_one::<String>("image-path"),
+        matches.get_one::<String>("cfgdb-path"),
+        matches.get_one::<String>("cpu-total"),
+        matches.get_one::<String>("mem-total"),
+        matches.get_one::<String>("disk-total"),
     ) {
         (
             Some(addr),
@@ -44,11 +68,11 @@ fn parse_cfg() -> Result<Cfg> {
             Some(mem),
             Some(disk),
         ) => Ok(Cfg {
-            serv_ip: addr.to_owned(),
-            serv_at: format!("{}:{}", addr, port.unwrap_or("9527")),
-            log_path: log_path.map(|lp| lp.to_owned()),
+            serv_ip: addr.clone(),
+            serv_at: format!("{}:{}", addr, port.map(|s| s.as_str()).unwrap_or("9527")),
+            log_path: log_path.map(|lp| lp.clone()),
             image_path: check_image_path(img_path).c(d!())?.to_owned(),
-            cfgdb_path: cfgdb_path.to_owned(),
+            cfgdb_path: cfgdb_path.clone(),
             cpu_total: cpu.parse::<i32>().c(d!())?,
             mem_total: mem.parse::<i32>().c(d!())?,
             disk_total: disk.parse::<i32>().c(d!())?,
@@ -75,7 +99,7 @@ fn parse_cfg() -> Result<Cfg> {
             eprintln!(
                 "\n\x1b[31;01mInvalid arguments\x1b[00m\n\n{}\n\n{}\n",
                 msg,
-                matches.usage()
+                matches.render_usage()
             );
 
             process::exit(1);

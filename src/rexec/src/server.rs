@@ -2,12 +2,12 @@
 //! # Server
 //!
 
-use crate::{common::*, sendfile::sendfile};
-use myutil::{err::*, *};
+use crate::{common::*, sendfile::sendfile, genlog};
+use ruc::*;
 use nix::sys::{
-    socket::{self, InetAddr, MsgFlags, SockAddr},
-    uio::IoVec,
+    socket::{self, MsgFlags, SockaddrStorage, Backlog, SockaddrIn},
 };
+use std::io::IoSlice;
 use std::{
     borrow::Cow,
     fs::{self, File},
@@ -19,22 +19,22 @@ use std::{
     time::Duration,
 };
 
-/// 响应 ExecReq 的 Daemon
-pub fn serv_cmd(serv_addr: &str) -> Result<()> {
+/// Daemon that responds to ExecReq
+pub fn serv_cmd(serv_addr: &str) -> ruc::Result<()> {
     let socket = gen_udp_sock().c(d!())?;
     let sock = *socket;
 
     set_reuse(sock).c(d!())?;
 
-    let serv_addr = serv_addr
+    let serv_addr: SockaddrIn = serv_addr
         .parse::<SocketAddr>()
-        .c(d!())
-        .map(|addr| SockAddr::new_inet(InetAddr::from_std(&addr)))?;
+        .c(d!())?
+        .into();
 
     socket::bind(sock, &serv_addr).c(d!())?;
 
     let mut cmd;
-    let mut buf = vct![0; 8192];
+    let mut buf = vec![0; 8192];
     loop {
         if let Ok((size, Some(peeraddr))) =
             info!(socket::recvfrom(sock, &mut buf))
@@ -47,8 +47,8 @@ pub fn serv_cmd(serv_addr: &str) -> Result<()> {
     }
 }
 
-/// 执行命令
-fn run_cmd(cmd: Vec<u8>, sock: RawFd, peeraddr: SockAddr) -> Result<()> {
+/// Execute command
+fn run_cmd(cmd: Vec<u8>, sock: RawFd, peeraddr: SockaddrStorage) -> ruc::Result<()> {
     macro_rules! check_err {
         ($ops: expr) => {
             $ops.c(d!()).or_else(|e| {
@@ -71,9 +71,9 @@ fn run_cmd(cmd: Vec<u8>, sock: RawFd, peeraddr: SockAddr) -> Result<()> {
     let mut resp = Resp::default();
 
     let stdout_path =
-        format!("/tmp/.{}_{}_{}.stdout", peeraddr.to_str(), sock, ts!());
+        format!("/tmp/.{}_{}_{}.stdout", peeraddr.to_string(), sock, ts!());
     let stderr_path =
-        format!("/tmp/.{}_{}_{}.stderr", peeraddr.to_str(), sock, ts!());
+        format!("/tmp/.{}_{}_{}.stderr", peeraddr.to_string(), sock, ts!());
     let cmd = String::from_utf8_lossy(&cmd).into_owned();
     let cmd = format!("({}) >{} 2>{}", cmd, stdout_path, stderr_path);
 
@@ -96,7 +96,7 @@ fn run_cmd(cmd: Vec<u8>, sock: RawFd, peeraddr: SockAddr) -> Result<()> {
         let stderr = info!(fs::read(stderr_path)).unwrap_or_else(|_| {
             "Can NOT read stderr!".to_owned().into_bytes()
         });
-        // 无法获得退出码时, 返回 -1
+        // Return -1 when unable to get exit code
         resp.code = res.code().unwrap_or(-1);
         resp.stderr =
             Cow::Owned(String::from_utf8_lossy(&stderr).into_owned());
@@ -109,20 +109,20 @@ fn run_cmd(cmd: Vec<u8>, sock: RawFd, peeraddr: SockAddr) -> Result<()> {
         .map(|_| ())
 }
 
-/// 响应 TransReq 的 Daemon
-pub fn serv_transfer(serv_addr: &str) -> Result<()> {
+/// Daemon that responds to TransReq
+pub fn serv_transfer(serv_addr: &str) -> ruc::Result<()> {
     let socket = gen_tcp_sock().c(d!())?;
     let sock = *socket;
 
     set_reuse(sock).c(d!())?;
 
-    let serv_addr = serv_addr
+    let serv_addr: SockaddrIn = serv_addr
         .parse::<SocketAddr>()
-        .c(d!())
-        .map(|addr| SockAddr::new_inet(InetAddr::from_std(&addr)))?;
+        .c(d!())?
+        .into();
 
     socket::bind(sock, &serv_addr).c(d!())?;
-    socket::listen(sock, 8).c(d!())?;
+    socket::listen(&sock, Backlog::new(8).c(d!())?).c(d!())?;
 
     loop {
         if let Ok(fd) = info!(socket::accept(sock)) {
@@ -133,20 +133,20 @@ pub fn serv_transfer(serv_addr: &str) -> Result<()> {
     }
 }
 
-fn do_serv_transfer(sock: RawFd) -> Result<()> {
+fn do_serv_transfer(sock: RawFd) -> ruc::Result<()> {
     let stream = unsafe { TcpStream::from_raw_fd(sock) };
 
-    // 单次读等待最多 3 秒
+    // Single read wait at most 3 seconds
     stream
         .set_read_timeout(Some(Duration::from_secs(3)))
         .c(d!())?;
 
-    // 单次写等待最多 3 秒
+    // Single write wait at most 3 seconds
     stream
         .set_write_timeout(Some(Duration::from_secs(3)))
         .c(d!())?;
 
-    // 接管生命周期, 确保及时关闭
+    // Take over lifecycle, ensure timely closure
     let socket = FileHdr::new(stream.into_raw_fd());
     let sock = *socket;
 
@@ -162,12 +162,12 @@ fn do_serv_transfer(sock: RawFd) -> Result<()> {
             socket::sendmsg(
                 sock,
                 &[
-                    IoVec::from_slice(&meta_bytes),
-                    IoVec::from_slice(&resp_bytes),
+                    IoSlice::new(&meta_bytes),
+                    IoSlice::new(&resp_bytes),
                 ],
                 &[],
                 MsgFlags::empty(),
-                None,
+                None::<&SockaddrStorage>,
             )
             .c(d!())?;
         };
@@ -237,7 +237,7 @@ fn do_serv_transfer(sock: RawFd) -> Result<()> {
                 siz -= recvd;
             }
 
-            // 已存储客户端上传的文件, 回复状态
+            // File uploaded by client has been stored, reply status
             let mut resp = Resp::default();
             resp.stdout = Cow::Borrowed("Success!");
             send_back!(resp);
@@ -245,13 +245,13 @@ fn do_serv_transfer(sock: RawFd) -> Result<()> {
         Direction::Get => {
             let file = check_err!(File::open(req.remote_file_path))?;
 
-            // 先回复元信息
+            // First reply with metadata
             let mut resp = Resp::default();
             resp.stdout = Cow::Borrowed("Request received! sending file...");
             resp.file_size = check_err!(file.metadata())?.len() as usize;
             send_back!(resp);
 
-            // 然后再发送文件
+            // Then send the file
             let fd_hdr = FileHdr::new(file.into_raw_fd());
             let fd = *fd_hdr;
 
@@ -263,7 +263,7 @@ fn do_serv_transfer(sock: RawFd) -> Result<()> {
 }
 
 /// reuse addr and port
-fn set_reuse(sock: RawFd) -> Result<()> {
+fn set_reuse(sock: RawFd) -> ruc::Result<()> {
     socket::setsockopt(sock, socket::sockopt::ReuseAddr, &true)
         .c(d!())
         .and_then(|_| {

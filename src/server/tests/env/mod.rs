@@ -1,5 +1,5 @@
 use lazy_static::lazy_static;
-use myutil::{err::*, *};
+use ruc::*;
 use nix::unistd::getuid;
 use serde::Serialize;
 use std::{

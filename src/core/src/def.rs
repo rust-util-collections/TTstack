@@ -1,12 +1,13 @@
 //!
-//! # 基本类型定义
+//! # Basic Type Definitions
 //!
 
 #[cfg(not(feature = "testmock"))]
 use crate::vmimg_path;
 use crate::{nat, pause, resume, vm};
 use lazy_static::lazy_static;
-use myutil::{err::*, *};
+use ruc::*;
+use base64::{Engine as _, engine::general_purpose};
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -20,11 +21,11 @@ use std::{
 use std::{thread, time};
 pub(crate) use ttcore_def::*;
 
-// VM 实例的生命周期最长 6 小时
+// VM instance maximum lifetime is 6 hours
 const MAX_LIFE_TIME: u64 = 6 * 3600;
-// `tt env start/stop ...` 最小间隔的秒数
+// Minimum interval in seconds for `tt env start/stop ...`
 const MIN_START_STOP_ITV: u64 = 20;
-// 未分配 VmId 前的预置值
+// Preset value before VmId allocation
 const VM_PRESET_ID: i32 = -1;
 
 const FUCK: &str = "The fucking world is over !!!";
@@ -35,65 +36,65 @@ pub type OsName = String;
 pub type ImagePath = String;
 
 ///////////////////
-// Serv 相关定义 //
+// Serv Related Definitions //
 ///////////////////
 
-/// 服务定义
+/// Service definition
 #[derive(Debug, Default)]
 pub struct Serv {
-    // 每个客户端对应的 Env 实例集合
+    // Collection of Env instances for each client
     cli: Arc<RwLock<HashMap<CliId, HashMap<EnvId, Env>>>>,
-    // Env 创建时添加, 销毁时删除
+    // Added when Env is created, removed when destroyed
     env_id_inuse: Arc<Mutex<HashSet<EnvId>>>,
-    // Vm 创建时添加, 销毁时删除
+    // Added when VM is created, removed when destroyed
     vm_id_inuse: Arc<Mutex<HashSet<VmId>>>,
-    // Vm 创建时添加, 销毁时删除
+    // Added when VM is created, removed when destroyed
     pub_port_inuse: Arc<Mutex<HashSet<PubPort>>>,
-    // 资源分配相关的统计数据
+    // Statistical data related to resource allocation
     resource: Arc<RwLock<Resource>>,
     /// configs of env[s]
     pub cfg_db: Arc<CfgDB>,
 }
 
 impl Serv {
-    /// 创建服务实例
+    /// Create service instance
     #[inline(always)]
     pub fn new(cfgdb_path: &str) -> Serv {
-        let mut s = Serv::default();
-        s.cfg_db = Arc::new(CfgDB::new(cfgdb_path));
-        s
+        Serv {
+            cfg_db: Arc::new(CfgDB::new(cfgdb_path)),
+            ..Default::default()
+        }
     }
 
-    /// 设置可用的资源总量
+    /// Set total available resources
     #[inline(always)]
     pub fn set_resource(&self, rsc: Resource) {
         *self.resource.write() =
             Resource::new(rsc.cpu_total, rsc.mem_total, rsc.disk_total);
     }
 
-    /// 获取资源占用的统计数据
+    /// Get resource usage statistics
     #[inline(always)]
     pub fn get_resource(&self) -> Resource {
         *self.resource.read()
     }
 
-    /// 清理过期的 Env
+    /// Clean up expired Env
     pub fn clean_expired_env(&self) {
         let ts = ts!();
 
         let cli = self.cli.read();
         let expired = cli
             .iter()
-            .map(|(cli_id, env)| {
+            .flat_map(|(cli_id, env)| {
                 env.iter()
                     .filter(|(_, v)| v.end_timestamp < ts)
                     .map(move |(k, _)| (cli_id.clone(), k.clone()))
             })
-            .flatten()
             .collect::<Vec<_>>();
 
         if !expired.is_empty() {
-            drop(cli); // 换写锁
+            drop(cli); // Switch to write lock
             let mut cli = self.cli.write();
             expired.iter().for_each(|(cli_id, k)| {
                 cli.get_mut(cli_id.as_str())
@@ -106,7 +107,7 @@ impl Serv {
         vm::zobmie_clean();
     }
 
-    /// 添加新的客户端
+    /// Add new client
     #[inline(always)]
     pub fn add_client(&self, id: CliId) -> Result<()> {
         let mut cli = self.cli.write();
@@ -118,25 +119,25 @@ impl Serv {
         }
     }
 
-    /// 删除客户端并清理所有资源
+    /// Delete client and clean up all resources
     #[inline(always)]
     pub fn del_client(&self, id: &CliIdRef) {
         self.cli.write().remove(id);
     }
 
-    /// !!! 做为创建新 Env 的最后一步 !!!
-    /// 添加 Env, 若 CliId 不存在, 会自动创建之
+    /// !!! As the final step of creating new Env !!!
+    /// Add Env, will auto-create if CliId doesn't exist
     #[inline(always)]
     pub fn register_env(&self, id: CliId, mut env: Env) -> Result<()> {
         let cli_id = id.clone();
         let mut cli = self.cli.write();
-        let env_set = cli.entry(id).or_insert(map! {});
+        let env_set = cli.entry(id).or_default();
         if env_set.get(&env.id).is_some() {
             Err(eg!("Env already exists!"))
         } else {
-            // !!! 必须在 cfg_db 之前!!!
-            // 创建成功, 默认为进行持久化缓存;
-            // 除非用户手动删除或生命周期耗完
+            // !!! Must be before cfg_db !!!
+            // Created successfully, default to persistent cache;
+            // Unless manually deleted by user or lifecycle expires
             env.vm.values_mut().for_each(|vm| {
                 vm.image_cached = true;
             });
@@ -148,13 +149,13 @@ impl Serv {
         }
     }
 
-    /// 清除指定的 Env
+    /// Remove specified Env
     #[inline(always)]
     pub fn del_env(&self, cli_id: &CliIdRef, env_id: &EnvIdRef) {
         if let Some(env_set) = self.cli.write().get_mut(cli_id) {
-            // drop 会自动清理资源
+            // drop will automatically clean up resources
             if let Some(mut env) = env_set.remove(env_id) {
-                // 标记待清理的实例镜像为可删除
+                // Mark instance images to be cleaned as deletable
                 env.vm.values_mut().for_each(|vm| {
                     vm.image_cached = false;
                 })
@@ -162,78 +163,86 @@ impl Serv {
         }
     }
 
-    /// 暂停运行, 让出资源
-    /// - 保留临时镜像和端口影射
-    /// - 停止所有 VM 进程
-    /// - 资源计数递减
+    /// Pause execution, release resources
+    /// - Keep temporary images and port mappings
+    /// - Stop all VM processes
+    /// - Decrement resource counters
     pub fn stop_env(
         &self,
         cli_id: &CliIdRef,
         env_id: &EnvIdRef,
     ) -> Result<()> {
-        if let Some(env_set) = self.cli.write().get_mut(cli_id) {
-            if let Some(env) = env_set.get_mut(env_id) {
-                let ts = ts!();
-                if env.last_mgmt_ts + MIN_START_STOP_ITV > ts {
-                    return Err(eg!(format!(
-                        "Wait {} seconds, and try again!",
-                        MIN_START_STOP_ITV
-                    )));
-                }
-
-                env.last_mgmt_ts = ts;
-                for vm in env.vm.values_mut() {
-                    pause(vm.id()).c(d!()).map(|_| {
-                        let mut rsc = self.resource.write();
-                        rsc.vm_active -= 1;
-                        rsc.cpu_used -= vm.cpu_num;
-                        rsc.mem_used -= vm.mem_size;
-                        rsc.disk_used -= vm.disk_size;
-                        vm.during_stop = true;
-                    })?;
-                }
-                env.is_stopped = true;
+        if let (Some(env_set), Some(env)) = (
+            self.cli.write().get_mut(cli_id),
+            self.cli
+                .write()
+                .get_mut(cli_id)
+                .and_then(|env_set| env_set.get_mut(env_id)),
+        ) {
+            let ts = ts!();
+            if env.last_mgmt_ts + MIN_START_STOP_ITV > ts {
+                return Err(eg!(format!(
+                    "Wait {} seconds, and try again!",
+                    MIN_START_STOP_ITV
+                )));
             }
+
+            env.last_mgmt_ts = ts;
+            for vm in env.vm.values_mut() {
+                pause(vm.id()).c(d!()).map(|_| {
+                    let mut rsc = self.resource.write();
+                    rsc.vm_active -= 1;
+                    rsc.cpu_used -= vm.cpu_num;
+                    rsc.mem_used -= vm.mem_size;
+                    rsc.disk_used -= vm.disk_size;
+                    vm.during_stop = true;
+                })?;
+            }
+            env.is_stopped = true;
         }
         Ok(())
     }
 
-    /// 恢复运行先前被 stop 的 ENV
-    /// - 启动所有 VM 进程
-    /// - 资源计数递增
+    /// Resume previously stopped ENV
+    /// - Start all VM processes
+    /// - Increment resource counters
     pub fn start_env(
         &self,
         cli_id: &CliIdRef,
         env_id: &EnvIdRef,
     ) -> Result<()> {
-        if let Some(env_set) = self.cli.write().get_mut(cli_id) {
-            if let Some(env) = env_set.get_mut(env_id) {
-                let ts = ts!();
-                if env.last_mgmt_ts + MIN_START_STOP_ITV > ts {
-                    return Err(eg!(format!(
-                        "Wait {} seconds, and try again!",
-                        MIN_START_STOP_ITV
-                    )));
-                }
-
-                env.last_mgmt_ts = ts;
-                for vm in env.vm.values_mut() {
-                    resume(vm).c(d!()).map(|_| {
-                        let mut rsc = self.resource.write();
-                        rsc.vm_active += 1;
-                        rsc.cpu_used += vm.cpu_num;
-                        rsc.mem_used += vm.mem_size;
-                        rsc.disk_used += vm.disk_size;
-                        vm.during_stop = false;
-                    })?;
-                }
-                env.is_stopped = false;
+        if let (Some(env_set), Some(env)) = (
+            self.cli.write().get_mut(cli_id),
+            self.cli
+                .write()
+                .get_mut(cli_id)
+                .and_then(|env_set| env_set.get_mut(env_id)),
+        ) {
+            let ts = ts!();
+            if env.last_mgmt_ts + MIN_START_STOP_ITV > ts {
+                return Err(eg!(format!(
+                    "Wait {} seconds, and try again!",
+                    MIN_START_STOP_ITV
+                )));
             }
+
+            env.last_mgmt_ts = ts;
+            for vm in env.vm.values_mut() {
+                resume(vm).c(d!()).map(|_| {
+                    let mut rsc = self.resource.write();
+                    rsc.vm_active += 1;
+                    rsc.cpu_used += vm.cpu_num;
+                    rsc.mem_used += vm.mem_size;
+                    rsc.disk_used += vm.disk_size;
+                    vm.during_stop = false;
+                })?;
+            }
+            env.is_stopped = false;
         }
         Ok(())
     }
 
-    /// 批量获取所有 Env 的概略信息
+    /// Batch get summary information of all Env
     #[inline(always)]
     pub fn get_env_meta(&self, cli_id: &CliIdRef) -> Vec<EnvMeta> {
         let get = |env: &HashMap<EnvId, Env>| {
@@ -243,20 +252,19 @@ impl Serv {
         self.cli.read().get(cli_id).map(get).unwrap_or_default()
     }
 
-    /// 获取全局 ENV 列表, 供 Proxy 使用
+    /// Get global ENV list for Proxy usage
     #[inline(always)]
     pub fn get_env_meta_all(&self) -> Vec<EnvMeta> {
         self.cli
             .read()
             .values()
-            .map(|env| env.values().map(|i| i.as_meta()))
-            .flatten()
+            .flat_map(|env| env.values().map(|i| i.as_meta()))
             .collect::<Vec<_>>()
     }
 
-    /// 批量获取 Env 详细信息,
-    /// 不能直接返回 Env 实体,
-    /// 会触发 Drop 动作
+    /// Batch get detailed Env information,
+    /// Cannot directly return Env entity,
+    /// Would trigger Drop action
     #[inline(always)]
     pub fn get_env_detail(
         &self,
@@ -272,7 +280,7 @@ impl Serv {
         self.cli.read().get(cli_id).map(get).unwrap_or_default()
     }
 
-    /// 更新指定 Env 的 lifetime
+    /// Update lifetime of specified Env
     #[inline(always)]
     pub fn update_env_life(
         &self,
@@ -286,7 +294,7 @@ impl Serv {
             if let Some(env) = env_set.get_mut(env_id) {
                 env.update_life(lifetime, is_fucker)
                     .c(d!())
-                    .and_then(|_| self.cfg_db.write(cli_id, &env).c(d!()))
+                    .and_then(|_| self.cfg_db.write(cli_id, env).c(d!()))
             } else {
                 Err(eg!("Env NOT exists!"))
             }
@@ -295,7 +303,7 @@ impl Serv {
         }
     }
 
-    /// 删除指定 OS 前缀的 VM
+    /// Delete VMs with specified OS prefix
     #[inline(always)]
     pub fn update_env_del_vm(
         &self,
@@ -309,7 +317,7 @@ impl Serv {
                 vmid_set.iter().for_each(|id| {
                     env.vm.remove(id);
                 });
-                self.cfg_db.write(cli_id, &env).c(d!())
+                self.cfg_db.write(cli_id, env).c(d!())
             } else {
                 Err(eg!("Env NOT exists!"))
             }
@@ -318,7 +326,7 @@ impl Serv {
         }
     }
 
-    /// 更新指定 Env 的 lifetime
+    /// Update lifetime of specified Env
     #[inline(always)]
     pub fn update_env_hardware(
         &self,
@@ -340,7 +348,7 @@ impl Serv {
                     deny_outgoing,
                 )
                 .c(d!())
-                .and_then(|_| self.cfg_db.write(cli_id, &env).c(d!()))
+                .and_then(|_| self.cfg_db.write(cli_id, env).c(d!()))
             } else {
                 Err(eg!("Env NOT exists!"))
             }
@@ -350,72 +358,73 @@ impl Serv {
     }
 }
 
-/// 已分配的资源信息,
-/// `*_used` 字段使用 i32 类型,
-/// 防止统计数据时的加和运算溢出
+/// Allocated resource information,
+/// `*_used` fields use i32 type,
+/// Prevent overflow in statistical data addition operations
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Resource {
-    /// Vm 数量
+    /// Number of VMs
     pub vm_active: i32,
-    /// Cpu 核心数
+    /// Number of CPU cores
     pub cpu_total: i32,
-    /// 已使用的 Cpu
+    /// Used CPU
     pub cpu_used: i32,
-    /// 内存容量(MB)
+    /// Memory capacity (MB)
     pub mem_total: i32,
-    /// 已使用的内存(MB)
+    /// Used memory (MB)
     pub mem_used: i32,
-    /// 磁盘容量(MB)
+    /// Disk capacity (MB)
     pub disk_total: i32,
-    /// 已使用的磁盘(MB)
+    /// Used disk (MB)
     pub disk_used: i32,
 }
 
 impl Resource {
-    /// 设置资源限制时使用
+    /// Used when setting resource limits
     #[inline(always)]
     pub fn new(cpu_total: i32, mem_total: i32, disk_total: i32) -> Resource {
-        let mut rsc = Resource::default();
-        rsc.cpu_total = cpu_total;
-        rsc.mem_total = mem_total;
-        rsc.disk_total = disk_total;
-        rsc
+        Resource {
+            cpu_total,
+            mem_total,
+            disk_total,
+            ..Default::default()
+        }
     }
 }
 
 //////////////////
-// Env 相关定义 //
+// Env Related Definitions //
 //////////////////
 
-/// 描述一个环境实例
+/// Describes an environment instance
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Env {
-    /// 保证全局唯一
+    /// Ensures global uniqueness
     pub id: EnvId,
-    // 起始时间设定之后不允许变更
+    // Start time cannot be changed once set
     start_timestamp: u64,
-    // 结束时间可以变更, 用以控制 Vm 的生命周期
+    // End time can be changed to control VM lifecycle
     end_timestamp: u64,
-    // 标记该 ENV 是否处于 stop 状态
+    // Mark whether this ENV is in stopped state
     is_stopped: bool,
-    /// 禁止外连网络
+    /// Deny outgoing network connections
     pub outgoing_denied: bool,
-    // 最近一次 stop 或 start 操作的时间,
-    // 控制 `tt env start/stop <ENV>` 的执行频率,
-    // 该类操作不能执行的太频繁, 会消耗性能并产生异常
+    // Time of the most recent stop or start operation,
+    // Controls the execution frequency of `tt env start/stop <ENV>`,
+    // These operations cannot be executed too frequently, as it would consume performance and cause exceptions
     last_mgmt_ts: u64,
-    /// 同一 Env 下所有 Vm 集合
+    /// Collection of all VMs under the same Env
     pub vm: HashMap<VmId, Vm>,
-    // 所属的 Serv 实例
+    // The Serv instance this belongs to
     #[serde(skip)]
     serv_belong_to: Weak<Serv>,
-    /// 所属的 Cli 端
+    /// The client this belongs to
     #[serde(skip)]
     pub cli_belong_to: Option<CliId>,
 }
 
 impl Env {
-    /// 获取描述性的元信息
+    /// Get descriptive metadata
     #[inline(always)]
     fn as_meta(&self) -> EnvMeta {
         EnvMeta {
@@ -427,7 +436,7 @@ impl Env {
         }
     }
 
-    /// 获取描述性的元信息
+    /// Get descriptive metadata
     #[inline(always)]
     fn as_info(&self) -> EnvInfo {
         EnvInfo {
@@ -439,7 +448,7 @@ impl Env {
         }
     }
 
-    /// 载入先前已存在的 ENV 实例
+    /// Load previously existing ENV instance
     pub fn load(mut self, serv: &Arc<Serv>) -> Result<Env> {
         let mut inuse = serv.env_id_inuse.lock();
         if inuse.get(&self.id).is_none() {
@@ -452,7 +461,7 @@ impl Env {
         Ok(self)
     }
 
-    /// 创建新的 Env 实例, 内部自动生成 ID
+    /// Create new Env instance, automatically generate ID internally
     pub fn new(serv: &Arc<Serv>, id: &EnvIdRef) -> Result<Env> {
         let mut inuse = serv.env_id_inuse.lock();
         if inuse.get(id).is_none() {
@@ -475,7 +484,7 @@ impl Env {
         })
     }
 
-    /// 更新已有实例的生命周期
+    /// Update lifecycle of existing instance
     #[inline(always)]
     pub fn update_life(&mut self, secs: u64, is_fucker: bool) -> Result<()> {
         if MAX_LIFE_TIME < secs && !is_fucker {
@@ -485,11 +494,11 @@ impl Env {
         Ok(())
     }
 
-    /// 更新已有实例的硬件配置
+    /// Update hardware configuration of existing instance
     ///
-    /// 除只更新端口的情况以外, 须检查:
-    /// - ENV 必须处于 stop 状态
-    /// - 系统资源足以支掌新的配置
+    /// Except for port-only updates, must check:
+    /// - ENV must be in stopped state
+    /// - System resources are sufficient to support the new configuration
     #[inline(always)]
     pub fn update_hardware(
         &mut self,
@@ -537,9 +546,9 @@ impl Env {
                 {
                     let mut inuse = s.pub_port_inuse.lock();
                     let vm_set =
-                        self.vm.values().fold(vct![], |mut base, vm| {
+                        self.vm.values().fold(vec![], |mut base, vm| {
                             vm.port_map.values().for_each(|port| {
-                                // 清理端口 inuse 信息
+                                // Clean up port inuse information
                                 inuse.remove(port);
                                 // 收集 VM 集合
                                 base.push(vm);
@@ -584,33 +593,33 @@ impl Env {
         Ok(())
     }
 
-    /// 批量创建 Vm 实例
+    /// Batch create VM instances
     #[inline(always)]
     pub fn add_vm_set(&mut self, cfg_set: Vec<VmCfg>) -> Result<()> {
-        self.add_vm_set_complex(cfg_set, vct![], false).c(d!())
+        self.add_vm_set_complex(cfg_set, vec![], false).c(d!())
     }
 
-    /// 批量创建或恢复 Vm 实例
+    /// Batch create or restore VM instances
     pub fn add_vm_set_complex(
         &mut self,
         cfg_set: Vec<VmCfg>,
         vm_set: Vec<Vm>,
         preload: bool,
     ) -> Result<()> {
-        let mut vm = vct![];
+        let mut vm = vec![];
 
-        // 检查可用资源
+        // Check available resources
         self.check_resource(&cfg_set).c(d!())?;
 
-        // 只做准备性工作, 不启动 VM 进程,
-        // 具体的工作容, 在各系统平台上有不同的实现.
+        // Only do preparatory work, do not start VM processes,
+        // Specific work content has different implementations on various system platforms.
         //
-        // 如:
-        // - 创建 VM 运行时镜像
-        // - 分配 VM 网络地址和端口影射
+        // Such as:
+        // - Create VM runtime images
+        // - Allocate VM network addresses and port mappings
         // - ...
         //
-        // 若出错返回, 相关资源会被`Drop`自动清理
+        // If error is returned, related resources will be automatically cleaned up by `Drop`
         if preload {
             for i in vm_set.into_iter() {
                 vm.push(Vm::create_meta_from_cache(&self.serv_belong_to, i)?);
@@ -621,18 +630,18 @@ impl Env {
             }
         }
 
-        // 若出错返回, 相关资源会被`Drop`自动清理
+        // If error is returned, related resources will be automatically cleaned up by `Drop`
         Self::check_image(&vm).c(d!())?;
 
-        // 准备工作成功完成后,
-        // 启动所有未处于 'during_stop' 状态的 VM 进程;
-        // 若出错返回, 所有未处于'image_cached'状态的
-        // VM 进程及相关资源会被`Drop`自动清理
+        // After preparatory work is successfully completed,
+        // Start all VM processes that are not in 'during_stop' state;
+        // If error is returned, all VM processes not in 'image_cached' state
+        // and related resources will be automatically cleaned up by `Drop`
         for vm in vm.iter().filter(|i| !i.during_stop) {
             vm.start_vm().c(d!())?;
         }
 
-        // 全部创建成功后再批量注册
+        // Batch register after all are successfully created
         vm.into_iter().for_each(|vm| {
             self.vm.insert(vm.id(), vm);
         });
@@ -645,14 +654,14 @@ impl Env {
         Ok(())
     }
 
-    // 检查实际的镜像文件是否已生成,
-    // canonicalize() 会确保路径中涉及的所有环节均实际存在,
+    // Check if actual image files have been generated,
+    // canonicalize() ensures all components in the path actually exist,
     #[cfg(not(feature = "testmock"))]
     fn check_image(vm: &[Vm]) -> Result<()> {
         let mut cnter = 0;
-        let path_set = vm.iter().map(|i| vmimg_path(i)).collect::<Vec<_>>();
+        let path_set = vm.iter().map(vmimg_path).collect::<Vec<_>>();
 
-        // 每个`zfs clone`预期耗时100ms, 最少2s
+        // Each `zfs clone` is expected to take 100ms, minimum 2s
         let mut timeout = (path_set.len() * 100) as u64;
         alt!(2000 > timeout, timeout = 2000);
         let timeout_unit = 200;
@@ -665,7 +674,8 @@ impl Env {
         {
             if nr_limit < cnter {
                 return Err(
-                    eg!(@path_set.into_iter().filter(|i| i.canonicalize().is_err()).collect::<Vec<_>>()),
+                    eg!(format!("Failed to canonicalize paths: {:?}", 
+                        path_set.into_iter().filter(|i| i.canonicalize().is_err()).collect::<Vec<_>>())),
                 );
             }
 
@@ -681,7 +691,7 @@ impl Env {
         Ok(())
     }
 
-    // 检查可用资源是否充裕
+    // Check if available resources are sufficient
     fn check_resource(&self, cfg_set: &[VmCfg]) -> Result<()> {
         if let Some(s) = self.serv_belong_to.upgrade() {
             let rsc = *s.resource.read();
@@ -690,18 +700,15 @@ impl Env {
                 (Some(0i32), Some(0i32), Some(0i32)),
                 |b, vm| {
                     (
-                        b.0.map(|i| {
+                        b.0.and_then(|i| {
                             i.checked_add(vm.cpu_num.unwrap_or(CPU_DEFAULT))
-                        })
-                        .flatten(),
-                        b.1.map(|i| {
+                        }),
+                        b.1.and_then(|i| {
                             i.checked_add(vm.mem_size.unwrap_or(MEM_DEFAULT))
-                        })
-                        .flatten(),
-                        b.2.map(|i| {
+                        }),
+                        b.2.and_then(|i| {
                             i.checked_add(vm.disk_size.unwrap_or(DISK_DEFAULT))
-                        })
-                        .flatten(),
+                        }),
                     )
                 },
             );
@@ -744,7 +751,7 @@ impl Env {
         Ok(())
     }
 
-    // 检查可用资源是否充裕
+    // Check if available resources are sufficient
     // - @cfg: (cpu_num, mem_size, disk_size)
     fn check_resource_and_set(&self, cfg: (i32, i32, i32)) -> Result<()> {
         if let Some(s) = self.serv_belong_to.upgrade() {
@@ -774,8 +781,7 @@ impl Env {
                 && rsc
                     .cpu_used
                     .checked_add(cpu_new)
-                    .map(|i| i.checked_sub(cpu))
-                    .flatten()
+                    .and_then(|i| i.checked_sub(cpu))
                     .ok_or(eg!(FUCK))?
                     > rsc.cpu_total
             {
@@ -789,8 +795,7 @@ impl Env {
                 && rsc
                     .mem_used
                     .checked_add(mem_new)
-                    .map(|i| i.checked_sub(mem))
-                    .flatten()
+                    .and_then(|i| i.checked_sub(mem))
                     .ok_or(eg!(FUCK))?
                     > rsc.mem_total
             {
@@ -804,8 +809,7 @@ impl Env {
                 && rsc
                     .disk_used
                     .checked_add(disk_new)
-                    .map(|i| i.checked_sub(disk))
-                    .flatten()
+                    .and_then(|i| i.checked_sub(disk))
                     .ok_or(eg!(FUCK))?
                     > rsc.disk_total
             {
@@ -828,10 +832,10 @@ impl Env {
     }
 }
 
-// 清理资源占用
+// Clean up resource usage
 impl Drop for Env {
     fn drop(&mut self) {
-        // 清理 Env 相关的 inuse 信息
+        // Clean up Env-related inuse information
         if let Some(s) = self.serv_belong_to.upgrade() {
             s.env_id_inuse.lock().remove(&self.id);
             info_omit!(s.cfg_db.del(self));
@@ -840,42 +844,42 @@ impl Drop for Env {
 }
 
 /////////////////
-// Vm 配置定义 //
+// VM Configuration Definitions //
 /////////////////
 
-/// 描述一个容器实例的信息
+/// Information describing a container instance
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Vm {
-    /// Vm 镜像路径
+    /// VM image path
     pub(crate) image_path: PathBuf,
-    /// 虚拟实例的类型
+    /// Type of virtual instance
     pub kind: VmKind,
-    /// CPU 数量
+    /// Number of CPUs
     pub cpu_num: i32,
-    /// 单位: MB
+    /// Unit: MB
     pub mem_size: i32,
-    /// 单位: MB
+    /// Unit: MB
     pub disk_size: i32,
 
-    // 所属的 Serv 实例
+    // The Serv instance this belongs to
     #[serde(skip)]
     serv_belong_to: Weak<Serv>,
 
-    /// 实例 ID 与 IP 唯一对应
+    /// Instance ID uniquely corresponds to IP
     pub(crate) id: VmId,
-    /// Vm IP 由 VmId 决定, 使用'10.10.x.x/8'网段
+    /// VM IP is determined by VmId, using '10.10.x.x/8' network segment
     pub ip: Ipv4,
-    /// 用于 DNAT 的内外端口影射关系,
+    /// Internal and external port mapping relationship for DNAT,
     pub port_map: HashMap<VmPort, PubPort>,
 
-    /// 是否处于暂停流程中
+    /// Whether it is in pause process
     pub during_stop: bool,
 
-    /// 缓存运行时镜像,
-    /// 即不随进程结束而销毁
+    /// Cache runtime image,
+    /// i.e., not destroyed when process ends
     pub image_cached: bool,
 
-    /// VM 的 UUID 是否需要随机(唯一)生成
+    /// Whether VM UUID needs to be randomly (uniquely) generated
     pub rand_uuid: bool,
 }
 
@@ -886,8 +890,7 @@ impl Vm {
             os: self
                 .image_path
                 .file_name()
-                .map(|f| f.to_str())
-                .flatten()
+                .and_then(|f| f.to_str())
                 .unwrap_or("Unknown")
                 .to_owned(),
             cpu_num: self.cpu_num,
@@ -931,7 +934,7 @@ impl Vm {
         }
     }
 
-    // (启动服务时)载入先前存在的信息时会用到
+    // Used when loading previously existing information (during service startup)
     #[inline(always)]
     pub(crate) fn create_meta_from_cache(
         serv: &Weak<Serv>,
@@ -945,28 +948,28 @@ impl Vm {
         }
     }
 
-    // 执行流程:
-    //     1. 分配 VmId 并写入全局 inuse 中
-    //     2. 依据 VmId 生成 Vm IP
-    //     3. 分配对外通信的网络端口
-    //     4. 设置 NAT 规则
-    //     5. 创建 VM 运行时镜像
-    // **此处不启动 VM 进程**
+    // Execution flow:
+    //     1. Allocate VmId and write to global inuse
+    //     2. Generate VM IP based on VmId
+    //     3. Allocate network ports for external communication
+    //     4. Set NAT rules
+    //     5. Create VM runtime images
+    // **VM processes are not started here**
     #[inline(always)]
     fn alloc_resource(&mut self, serv: &Arc<Serv>) -> Result<()> {
-        // 实际分配资源之前预先计数
+        // Pre-count before actually allocating resources
         let mut rsc = serv.resource.write();
         rsc.vm_active += 1;
         rsc.cpu_used += self.cpu_num;
         rsc.mem_used += self.mem_size;
         rsc.disk_used += self.disk_size;
-        // 释放锁
+        // Release lock
         drop(rsc);
 
-        self.alloc_id(&serv)
+        self.alloc_id(serv)
             .c(d!())
             .map(|id| self.ip = Self::gen_ip(id))
-            .and_then(|_| self.alloc_pub_port(&serv).c(d!()))
+            .and_then(|_| self.alloc_pub_port(serv).c(d!()))
             .and_then(|_| nat::set_rule(self).c(d!()))
             .and_then(|_| self.pre_start().c(d!()))
     }
@@ -981,7 +984,7 @@ impl Vm {
         vm::start(self).c(d!())
     }
 
-    // 分配 VmId 并写入全局 inuse 中
+    // Allocate VmId and write to global inuse
     #[inline(always)]
     fn alloc_id(&mut self, serv: &Arc<Serv>) -> Result<VmId> {
         const VM_ID_LIMIT: i32 = 0xffff;
@@ -992,7 +995,7 @@ impl Vm {
         let vm_id = {
             let mut vmid_inuse = serv.vm_id_inuse.lock();
             if VM_PRESET_ID == self.id {
-                // 新服务运行期间新创建的 VM
+                // Newly created VM during new service runtime
                 let mut cnter = 0;
                 loop {
                     let id =
@@ -1008,11 +1011,11 @@ impl Vm {
                     }
                 }
             } else if vmid_inuse.get(&self.id).is_none() {
-                // 服务初始化时载入先前已有 VM
+                // Load previously existing VM during service initialization
                 vmid_inuse.insert(self.id);
                 self.id
             } else {
-                // 服务初始化时存在重复的 VmId, 视为严重错误
+                // Duplicate VmId exists during service initialization, considered a serious error
                 return Err(eg!(FUCK));
             }
         };
@@ -1020,13 +1023,13 @@ impl Vm {
         Ok(vm_id)
     }
 
-    // 基于 VmId 生成 IP
+    // Generate IP based on VmId
     #[inline(always)]
     fn gen_ip(vm_id: VmId) -> Ipv4 {
         Ipv4::new(format!("10.10.{}.{}", vm_id / 256, vm_id % 256))
     }
 
-    // 分配外部端口并写入全局 inuse 中
+    // Allocate external ports and write to global inuse
     fn alloc_pub_port(&mut self, serv: &Arc<Serv>) -> Result<()> {
         const PUB_PORT_LIMIT: u16 = 20000;
         const PUB_PORT_BASE: u16 = 40000;
@@ -1036,7 +1039,7 @@ impl Vm {
 
         let mut cnter = 0;
         let mut v_cnter = self.port_map.len();
-        let mut buf = vct![];
+        let mut buf = vec![];
         while 0 < v_cnter {
             let mut port_inuse = serv.pub_port_inuse.lock();
             let port = PUB_PORT
@@ -1057,7 +1060,7 @@ impl Vm {
             }
         }
 
-        self.port_map.values_mut().zip(buf.into_iter()).for_each(
+        self.port_map.values_mut().zip(buf).for_each(
             |(p, port)| {
                 *p = port;
             },
@@ -1076,11 +1079,11 @@ impl Vm {
 impl Drop for Vm {
     fn drop(&mut self) {
         if let Some(s) = self.serv_belong_to.upgrade() {
-            // 清理 VmId inuse 信息
+            // Clean up VmId inuse information
             s.vm_id_inuse.lock().remove(&self.id);
 
-            // 清理资源统计数据, 若正处于暂停状态,
-            // 其资源占用已经被减过一次了, 不能再减
+            // Clean up resource statistics, if currently in paused state,
+            // its resource usage has already been decremented once, cannot be decremented again
             if !self.during_stop {
                 let mut rsc = s.resource.write();
                 rsc.vm_active -= 1;
@@ -1090,16 +1093,16 @@ impl Drop for Vm {
             }
 
             if !self.port_map.is_empty() {
-                let mut pub_port = vct![];
+                let mut pub_port = vec![];
                 let mut inuse = s.pub_port_inuse.lock();
                 self.port_map.values().for_each(|port| {
-                    // 清理端口 inuse 信息
+                    // Clean up port inuse information
                     inuse.remove(port);
-                    // 收集待清理端口
+                    // Collect ports to be cleaned
                     pub_port.push(*port);
                 });
 
-                // 清理 nat 规则
+                // Clean up NAT rules
                 info_omit!(nat::clean_rule(&[self]));
             }
         }
@@ -1109,10 +1112,10 @@ impl Drop for Vm {
 }
 
 ////////////////
-// Env Cfg DB //
+// Env Config DB //
 ////////////////
 
-/// 管理 Env 在磁盘上的信息
+/// Manage Env information on disk
 #[derive(Debug, Default)]
 pub struct CfgDB {
     path: PathBuf,
@@ -1131,17 +1134,16 @@ impl CfgDB {
     /// load all env[s] from disk
     pub fn read_all(&self) -> Result<HashMap<CliId, Vec<Env>>> {
         let get_cli_list = || -> Result<Vec<(CliId, PathBuf)>> {
-            let mut list = vct![];
+            let mut list = vec![];
             for i in fs::read_dir(&self.path).c(d!())? {
                 let entry = i.c(d!())?;
                 let path = entry.path();
                 if path.is_dir() {
                     let cli = path
                         .file_name()
-                        .map(|p| p.to_str())
-                        .flatten()
+                        .and_then(|p| p.to_str())
                         .ok_or(eg!())
-                        .and_then(|cli| base64::decode(cli.as_bytes()).c(d!()))
+                        .and_then(|cli| general_purpose::STANDARD.decode(cli.as_bytes()).c(d!()))
                         .map(|cli| {
                             String::from_utf8_lossy(&cli).into_owned()
                         })?;
@@ -1152,12 +1154,11 @@ impl CfgDB {
         };
 
         let get_env_list = |cli_path: &Path| -> Result<Vec<Env>> {
-            let mut list = vct![];
+            let mut list = vec![];
             for i in fs::read_dir(cli_path).c(d!())? {
                 let entry = i.c(d!())?;
                 let path = entry.path();
-                if let Some(f) = path.file_name().map(|f| f.to_str()).flatten()
-                {
+                if let Some(f) = path.file_name().and_then(|f| f.to_str()) {
                     if path.is_file() && f.ends_with(".json") {
                         fs::read(&path)
                             .c(d!())
@@ -1170,9 +1171,9 @@ impl CfgDB {
                                 } else {
                                     info_omit!(fs::remove_file(path));
 
-                                    // 服务进程异常退出时,
-                                    // 清理工作往往都没有做完,
-                                    // 新启动过程中尝试再次清理
+                                    // When service process exits abnormally,
+                                    // cleanup work is often not completed,
+                                    // attempt to clean up again during new startup process
                                     env.vm.values().for_each(|i| {
                                         omit!(vm::post_clean(i));
                                     });
@@ -1196,7 +1197,7 @@ impl CfgDB {
     pub fn write(&self, cli_id: &CliIdRef, env: &Env) -> Result<()> {
         serde_json::to_string_pretty(env).c(d!()).and_then(|cfg| {
             let mut cfgpath = self.path.clone();
-            cfgpath.push(base64::encode(cli_id));
+            cfgpath.push(general_purpose::STANDARD.encode(cli_id));
             fs::create_dir_all(&cfgpath).c(d!())?;
             cfgpath.push(format!("{}.json", &env.id));
             fs::write(cfgpath, cfg).c(d!())
@@ -1211,7 +1212,7 @@ impl CfgDB {
             .as_ref()
             .ok_or(eg!())
             .c(d!())
-            .map(base64::encode)
+            .map(|cli| general_purpose::STANDARD.encode(cli))
             .map(|cli| String::from_utf8_lossy(cli.as_bytes()).into_owned())?;
         cfgpath.push(cli);
         cfgpath.push(format!("{}.json", &env.id));

@@ -7,8 +7,8 @@
 pub(crate) mod server;
 
 use super::{send_err, send_ok, SERV};
-use crate::{def::*, CFG};
-use myutil::{err::*, *};
+use crate::{def::*, CFG, util::{genlog, p}};
+use ruc::{*, err::*};
 use serde::Deserialize;
 use std::{
     mem,
@@ -17,12 +17,12 @@ use std::{
 };
 use ttcore::{vm_kind, Env};
 
-type Ops = fn(SocketAddr, Vec<u8>) -> Result<()>;
+type Ops = fn(SocketAddr, Vec<u8>) -> ruc::Result<()>;
 include!("../../../server_def/src/included_ops_map.rs");
 
 // 注册 Cli, 一般无需调用,
 // 创建 Env 时若发现 Cli 不存在会自动创建之
-fn register_client_id(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
+fn register_client_id(peeraddr: SocketAddr, request: Vec<u8>) -> ruc::Result<()> {
     let mut req = serde_json::from_slice::<Req<&str>>(&request).c(d!())?;
     SERV.add_client(mem::take(&mut req.cli_id))
         .c(d!())
@@ -31,7 +31,7 @@ fn register_client_id(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
 }
 
 /// 获取服务端的资源分配信息
-fn get_server_info(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
+fn get_server_info(peeraddr: SocketAddr, request: Vec<u8>) -> ruc::Result<()> {
     let req = serde_json::from_slice::<Req<&str>>(&request).c(d!())?;
 
     let rsc = SERV.get_resource();
@@ -50,14 +50,14 @@ fn get_server_info(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
 }
 
 /// 获取服务端已存在的 Env 概略信息
-fn get_env_list(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
+fn get_env_list(peeraddr: SocketAddr, request: Vec<u8>) -> ruc::Result<()> {
     let mut req = serde_json::from_slice::<Req<&str>>(&request).c(d!())?;
     let res = SERV.get_env_meta(&mem::take(&mut req.cli_id));
     send_ok!(req.uuid, map! {CFG.serv_at.clone() => res}, peeraddr).c(d!())
 }
 
 /// 获取服务端已存在的 Env 详细信息
-fn get_env_info(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
+fn get_env_info(peeraddr: SocketAddr, request: Vec<u8>) -> ruc::Result<()> {
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
@@ -98,10 +98,10 @@ impl DerefMut for ReqAddEnvWrap {
 
 impl ReqAddEnvWrap {
     /// 根据请求参数生成 Env
-    pub fn create_env(mut self) -> Result<Env> {
+    pub fn create_env(mut self) -> ruc::Result<Env> {
         self.set_ssh_port();
         let vmset = if let Some(vc) = self.vmcfg.take() {
-            let mut res = vct![];
+            let mut res = vec![];
             let os_info = server::OS_INFO.read();
             for i in vc.into_iter() {
                 res.push(VmCfg {
@@ -160,7 +160,7 @@ impl ReqAddEnvWrap {
 }
 
 /// 创建新的 Env
-fn add_env(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
+fn add_env(peeraddr: SocketAddr, request: Vec<u8>) -> ruc::Result<()> {
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
@@ -181,7 +181,7 @@ fn add_env(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
 }
 
 /// 从已有 ENV 中踢出指定的 VM 实例
-fn update_env_kick_vm(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
+fn update_env_kick_vm(peeraddr: SocketAddr, request: Vec<u8>) -> ruc::Result<()> {
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
@@ -191,7 +191,7 @@ fn update_env_kick_vm(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
 
     let mut req = serde_json::from_slice::<MyReq>(&request).c(d!())?;
     let cli_id = mem::take(&mut req.cli_id);
-    SERV.get_env_detail(&cli_id, vct![mem::take(&mut req.msg.env_id)])
+    SERV.get_env_detail(&cli_id, vec![mem::take(&mut req.msg.env_id)])
         .into_iter()
         .for_each(|ei| {
             info_omit!(
@@ -219,7 +219,7 @@ fn update_env_kick_vm(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
 }
 
 /// 更新已有 Env 的生命周期
-fn update_env_lifetime(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
+fn update_env_lifetime(peeraddr: SocketAddr, request: Vec<u8>) -> ruc::Result<()> {
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
@@ -240,7 +240,7 @@ fn update_env_lifetime(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
 }
 
 /// 删除 Env
-fn del_env(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
+fn del_env(peeraddr: SocketAddr, request: Vec<u8>) -> ruc::Result<()> {
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
@@ -255,7 +255,7 @@ fn del_env(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
 }
 
 /// 获取服务端已存在的 Env 概略信息(全局)
-fn get_env_list_all(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
+fn get_env_list_all(peeraddr: SocketAddr, request: Vec<u8>) -> ruc::Result<()> {
     let req = serde_json::from_slice::<Req<&str>>(&request).c(d!())?;
     let res = SERV.get_env_meta_all();
     send_ok!(req.uuid, map! {CFG.serv_at.clone() => res}, peeraddr).c(d!())
@@ -265,7 +265,7 @@ fn get_env_list_all(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
 /// - 资源计数递减
 /// - 停止所有 VM 进程
 /// - 保留临时镜像和端口影射
-fn stop_env(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
+fn stop_env(peeraddr: SocketAddr, request: Vec<u8>) -> ruc::Result<()> {
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
@@ -285,7 +285,7 @@ fn stop_env(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
 /// 恢复运行先前被 stop 的 ENV
 /// - 资源计数递增
 /// - 启动所有 VM 进程
-fn start_env(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
+fn start_env(peeraddr: SocketAddr, request: Vec<u8>) -> ruc::Result<()> {
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,
@@ -303,7 +303,7 @@ fn start_env(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
 }
 
 /// 更新已有 Env 的资源配置
-fn update_env_resource(peeraddr: SocketAddr, request: Vec<u8>) -> Result<()> {
+fn update_env_resource(peeraddr: SocketAddr, request: Vec<u8>) -> ruc::Result<()> {
     #[derive(Deserialize)]
     struct MyReq {
         uuid: u64,

@@ -7,7 +7,7 @@
 //! - sendfile 系统接口前两个参数的位置, 在 Linux 与 FreeBSD/MacOS 两类平台上是相反的
 //!
 
-use myutil::{err::*, *};
+use ruc::*;
 use nix::sys::sendfile::sendfile as sf;
 #[cfg(target_os = "freebsd")]
 use nix::sys::sendfile::SfFlags;
@@ -18,7 +18,7 @@ pub(crate) fn sendfile(
     file_fd: RawFd,
     sock_fd: RawFd,
     file_size: usize,
-) -> Result<()> {
+) -> ruc::Result<()> {
     let mut offset = 0;
     loop {
         let sendsiz =
@@ -35,7 +35,7 @@ pub(crate) fn sendfile(
     file_fd: RawFd,
     sock_fd: RawFd,
     file_size: usize,
-) -> Result<()> {
+) -> ruc::Result<()> {
     let mut offset = 0;
     loop {
         let (res, sendsiz) = sf(
@@ -63,7 +63,7 @@ pub(crate) fn sendfile(
     file_fd: RawFd,
     sock_fd: RawFd,
     file_size: usize,
-) -> Result<()> {
+) -> ruc::Result<()> {
     let mut offset = 0;
     loop {
         let (res, sendsiz) =
@@ -87,6 +87,6 @@ pub(crate) fn sendfile(
     file_fd: RawFd,
     sock_fd: RawFd,
     file_size: usize,
-) -> Result<()> {
+) -> ruc::Result<()> {
     Err(eg!("Unsupported platform!"))
 }

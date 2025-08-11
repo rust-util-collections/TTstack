@@ -8,7 +8,7 @@
 
 use super::super::*;
 use crate::{get_servaddr, resp_print};
-use myutil::{err::*, *};
+use ruc::*;
 
 ///////////////////////////////
 #[derive(Default)]
