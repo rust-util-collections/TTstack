@@ -91,7 +91,7 @@ doc:
 
 githook:
 	@mkdir -p ./.git/hooks # play with online gitlab-ci
-	@cp ./tools/githooks/pre-commit ./.git/hooks/
+	# @cp ./tools/githooks/pre-commit ./.git/hooks/
 
 stop:
 	-@ pkill -9 ttproxy
