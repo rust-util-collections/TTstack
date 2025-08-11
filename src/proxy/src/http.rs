@@ -6,7 +6,7 @@
 
 use crate::{hdr, util, DEFAULT_REQ_ID, RECV_TO_SECS, UAU_ID};
 use async_std::future;
-use ruc::{*, err::*};
+use ruc::*;
 use std::{sync::atomic::Ordering, time::Duration};
 use tide::{Body, Error, Request};
 
@@ -38,7 +38,7 @@ macro_rules! gen_hdr {
                 Err(e) => return err!(e),
             };
 
-            hdr::OPS_MAP[OPS_ID](OPS_ID, myaddr, msg)
+            hdr::OPS_MAP[OPS_ID](OPS_ID, myaddr.into(), msg)
                 .c(d!())
                 .map_err(|e| err!(@e))?;
 

@@ -28,7 +28,6 @@ pub mod zlib {
 
     #[cfg(test)]
     mod tests {
-        use super::*;
         use rand::random;
 
         #[test]
@@ -36,7 +35,7 @@ pub mod zlib {
             (0..(10 + random::<u8>() % 20))
                 .map(|i| (0..i).map(|_| random::<u8>()).collect::<Vec<_>>())
                 .for_each(|sample| {
-                    assert_eq!(sample, unwrap!(decode(&unwrap!(encode(&sample)))));
+                    assert_eq!(sample, super::decode(&super::encode(&sample).unwrap()).unwrap());
                 });
         }
     }

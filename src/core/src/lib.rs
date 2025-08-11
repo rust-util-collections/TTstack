@@ -16,26 +16,21 @@ pub use linux::*;
 mod common {
     use crate::Vm;
     use futures::executor::{ThreadPool, ThreadPoolBuilder};
-    use lazy_static::lazy_static;
     use ruc::*;
-    use std::path::PathBuf;
+    use std::{path::PathBuf, sync::LazyLock};
 
     pub(crate) const CLONE_MARK: &str = "clone_";
 
-    lazy_static! {
-        pub(crate) static ref POOL: ThreadPool =
-            pnk!(ThreadPoolBuilder::new().pool_size(1).create());
-    }
+    pub(crate) static POOL: LazyLock<ThreadPool> =
+        LazyLock::new(|| pnk!(ThreadPoolBuilder::new().pool_size(1).create()));
 
     pub(crate) async fn asleep(sec: u64) {
         futures_timer::Delay::new(std::time::Duration::from_secs(sec)).await;
     }
 
     #[cfg(feature = "zfs")]
-    lazy_static! {
-        pub(crate) static ref ZFS_ROOT: &'static str =
-            pnk!(imgroot_register(None));
-    }
+    pub(crate) static ZFS_ROOT: LazyLock<&'static str> =
+        LazyLock::new(|| pnk!(imgroot_register(None)));
 
     #[cfg(feature = "zfs")]
     pub(crate) fn imgroot_register(
@@ -96,6 +91,4 @@ mod non_linux_common {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
-pub(crate) use non_linux_common::*;
 

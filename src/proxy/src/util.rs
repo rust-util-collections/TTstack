@@ -6,14 +6,14 @@ use async_std::{
     net::{SocketAddr, UdpSocket},
     task,
 };
-use ruc::{*, err::*};
+use ruc::*;
 use nix::sys::socket::{
     bind, sendto, setsockopt, socket, sockopt, AddressFamily, MsgFlags,
-    SockaddrStorage, SockFlag, SockType, UnixAddr,
+    SockFlag, SockType, UnixAddr, SockaddrStorage,
 };
 use serde::Serialize;
 use std::{
-    os::unix::io::{FromRawFd, RawFd},
+    os::unix::io::{FromRawFd, RawFd, IntoRawFd, BorrowedFd},
     time::Duration,
 };
 use ttserver_def::*;
@@ -37,26 +37,29 @@ use ttutils::zlib;
 /// NOTE:
 /// Unix Socket that needs to receive messages must explicitly bind address;
 /// If sent anonymously, unable to receive reply messages from the other party.
-pub(crate) fn gen_uau_socket(addr: &[u8]) -> ruc::Result<(UdpSocket, SockAddr)> {
-    let fd = socket(
+pub(crate) fn gen_uau_socket(addr: &[u8]) -> ruc::Result<(UdpSocket, UnixAddr)> {
+    let owned_fd = socket(
         AddressFamily::Unix,
         SockType::Datagram,
         SockFlag::empty(),
         None,
     )
     .c(d!())?;
+    
+    let raw_fd = owned_fd.into_raw_fd();
 
-    setsockopt(fd, sockopt::ReuseAddr, &true).c(d!())?;
-    setsockopt(fd, sockopt::ReusePort, &true).c(d!())?;
+    let borrowed_fd = unsafe { BorrowedFd::borrow_raw(raw_fd) };
+    setsockopt(&borrowed_fd, sockopt::ReuseAddr, &true).c(d!())?;
+    setsockopt(&borrowed_fd, sockopt::ReusePort, &true).c(d!())?;
 
-    let sa = SockAddr::Unix(UnixAddr::new_abstract(addr).c(d!())?);
-    bind(fd, &sa).c(d!())?;
+    let sa = UnixAddr::new(addr).c(d!())?;
+    bind(raw_fd, &sa).c(d!())?;
 
-    Ok((unsafe { UdpSocket::from_raw_fd(fd) }, sa))
+    Ok((unsafe { UdpSocket::from_raw_fd(raw_fd) }, sa))
 }
 
 /// Send back success information
-#[macro_export(crate)]
+#[macro_export]
 macro_rules! send_ok {
     ($uuid: expr, $msg: expr, $peeraddr: expr) => {
         $crate::util::send_back(
@@ -77,7 +80,7 @@ pub(crate) fn gen_resp_ok(uuid: u64, msg: impl Serialize) -> Resp {
 }
 
 /// Send back failure information
-#[macro_export(crate)]
+#[macro_export]
 macro_rules! send_err {
     ($uuid: expr, $err: expr, $peeraddr: expr) => {{
         let log = genlog($err);
@@ -87,7 +90,7 @@ macro_rules! send_err {
             $peeraddr,
         )
         .c(d!(&log))
-        .map(|_| p(eg!(log)))
+        .map_err(|e| { p(eg!(log)); e })
     }};
     // Errors generated directly at the top level, no longer forwarded internally
     (@$uuid: expr, $err: expr, $peeraddr: expr) => {{
@@ -98,7 +101,7 @@ macro_rules! send_err {
             $peeraddr,
         )
         .c(d!(&log))
-        .map(|_| p(eg!(log)))
+        .map_err(|e| { p(eg!(log)); e })
     }};
 }
 
@@ -111,12 +114,23 @@ pub(crate) fn gen_resp_err(uuid: u64, msg: &str) -> Resp {
     }
 }
 
+/// Generate log message from error
+pub(crate) fn genlog<E: std::fmt::Display>(err: E) -> String {
+    format!("{}", err)
+}
+
+/// Print function for logging/debugging
+pub(crate) fn p<T: std::fmt::Display>(msg: T) -> T {
+    eprintln!("{}", msg);
+    msg
+}
+
 /// Send information back to 'outbound hub'
 #[inline(always)]
 pub(crate) fn send_back(
     sock: RawFd,
     resp: Resp,
-    peeraddr: SockAddr,
+    peeraddr: SockaddrStorage,
 ) -> ruc::Result<()> {
     serde_json::to_vec(&resp)
         .c(d!())

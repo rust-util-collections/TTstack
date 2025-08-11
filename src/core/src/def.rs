@@ -2,10 +2,9 @@
 //! # Basic Type Definitions
 //!
 
+use crate::{nat, pause, resume, vm};
 #[cfg(not(feature = "testmock"))]
 use crate::vmimg_path;
-use crate::{nat, pause, resume, vm};
-use lazy_static::lazy_static;
 use ruc::*;
 use base64::{Engine as _, engine::general_purpose};
 use parking_lot::{Mutex, RwLock};
@@ -15,7 +14,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::atomic::{AtomicI32, AtomicU16, Ordering},
-    sync::{Arc, Weak},
+    sync::{Arc, LazyLock, Weak},
 };
 #[cfg(not(feature = "testmock"))]
 use std::{thread, time};
@@ -172,7 +171,7 @@ impl Serv {
         cli_id: &CliIdRef,
         env_id: &EnvIdRef,
     ) -> Result<()> {
-        if let (Some(env_set), Some(env)) = (
+        if let (Some(_env_set), Some(env)) = (
             self.cli.write().get_mut(cli_id),
             self.cli
                 .write()
@@ -211,7 +210,7 @@ impl Serv {
         cli_id: &CliIdRef,
         env_id: &EnvIdRef,
     ) -> Result<()> {
-        if let (Some(env_set), Some(env)) = (
+        if let (Some(_env_set), Some(env)) = (
             self.cli.write().get_mut(cli_id),
             self.cli
                 .write()
@@ -988,9 +987,7 @@ impl Vm {
     #[inline(always)]
     fn alloc_id(&mut self, serv: &Arc<Serv>) -> Result<VmId> {
         const VM_ID_LIMIT: i32 = 0xffff;
-        lazy_static! {
-            static ref VM_ID: AtomicI32 = AtomicI32::new(0);
-        }
+        static VM_ID: LazyLock<AtomicI32> = LazyLock::new(|| AtomicI32::new(0));
 
         let vm_id = {
             let mut vmid_inuse = serv.vm_id_inuse.lock();
@@ -1033,9 +1030,7 @@ impl Vm {
     fn alloc_pub_port(&mut self, serv: &Arc<Serv>) -> Result<()> {
         const PUB_PORT_LIMIT: u16 = 20000;
         const PUB_PORT_BASE: u16 = 40000;
-        lazy_static! {
-            static ref PUB_PORT: AtomicU16 = AtomicU16::new(PUB_PORT_BASE);
-        }
+        static PUB_PORT: LazyLock<AtomicU16> = LazyLock::new(|| AtomicU16::new(PUB_PORT_BASE));
 
         let mut cnter = 0;
         let mut v_cnter = self.port_map.len();
@@ -1158,8 +1153,8 @@ impl CfgDB {
             for i in fs::read_dir(cli_path).c(d!())? {
                 let entry = i.c(d!())?;
                 let path = entry.path();
-                if let Some(f) = path.file_name().and_then(|f| f.to_str()) {
-                    if path.is_file() && f.ends_with(".json") {
+                if let Some(f) = path.file_name().and_then(|f| f.to_str())
+                    && path.is_file() && f.ends_with(".json") {
                         fs::read(&path)
                             .c(d!())
                             .and_then(|data| {
@@ -1180,7 +1175,6 @@ impl CfgDB {
                                 }
                             })?
                     }
-                }
             }
             Ok(list)
         };

@@ -92,20 +92,17 @@ pub(crate) mod real {
     //! ```
 
     use crate::{asleep, Vm, POOL};
-    use lazy_static::lazy_static;
     use ruc::*;
     use parking_lot::Mutex;
-    use std::{collections::HashSet, mem, process, sync::Arc};
+    use std::{collections::HashSet, mem, process, sync::{Arc, LazyLock}};
 
     const TABLE_PROTO: &str = "ip";
     const TABLE_NAME: &str = "tt-core";
 
-    lazy_static! {
-        static ref RULE_SET: Arc<Mutex<Vec<String>>> =
-            Arc::new(Mutex::new(vct![]));
-        static ref RULE_SET_ALLOW_FAIL: Arc<Mutex<Vec<String>>> =
-            Arc::new(Mutex::new(vct![]));
-    }
+    static RULE_SET: LazyLock<Arc<Mutex<Vec<String>>>> =
+        LazyLock::new(|| Arc::new(Mutex::new(vct![])));
+    static RULE_SET_ALLOW_FAIL: LazyLock<Arc<Mutex<Vec<String>>>> =
+        LazyLock::new(|| Arc::new(Mutex::new(vct![])));
 
     // nft 初始化
     pub(in crate::linux) fn init(serv_ip: &str) -> Result<()> {

@@ -3,7 +3,7 @@
 //!
 
 use crate::{hdr::server::refresh_os_info, util::asleep, CFG, POOL, SERV};
-use ruc::{*, err::*};
+use ruc::*;
 use nix::unistd;
 #[cfg(not(feature = "testmock"))]
 use std::{fs, mem};

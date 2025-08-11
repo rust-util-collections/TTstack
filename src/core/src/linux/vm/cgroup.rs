@@ -5,13 +5,12 @@
 //!
 
 use crate::{asleep, linux::vm::util, VmId, POOL};
-use lazy_static::lazy_static;
 use ruc::*;
 use nix::{
     sys::signal::{self, kill},
     unistd::Pid,
 };
-use std::{fs, io::Write, path::PathBuf, process};
+use std::{fs, io::Write, path::PathBuf, process, sync::LazyLock};
 
 // 采用 private mount, 多服务可使用同一挂载点
 const CGROUP_ROOT_PATH: &str = "/tmp/.ttcgroup";
@@ -21,10 +20,9 @@ const CGROUP_ADMIN_PATH: &str = "/tmp/.ttcgroup/ttadmin";
 
 // 重置管理进程的 Cgroup 状态
 fn cgrp_reset_admin() -> Result<()> {
-    lazy_static! {
-        static ref CGRP_PROCS: String =
-            format!("{}/cgroup.procs", CGROUP_ADMIN_PATH);
-    }
+    static CGRP_PROCS: LazyLock<String> = LazyLock::new(||
+        format!("{}/cgroup.procs", CGROUP_ADMIN_PATH)
+    );
 
     fs::OpenOptions::new()
         .append(true)

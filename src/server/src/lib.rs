@@ -14,23 +14,19 @@ mod util;
 
 use def::{DEFAULT_REQ_ID, OPS_ID_LEN};
 use futures::executor::ThreadPool;
-use lazy_static::lazy_static;
-use ruc::{*, err::*};
+use ruc::*;
 use std::{
     mem,
     net::{SocketAddr, UdpSocket},
-    sync::Arc,
+    sync::{Arc, LazyLock},
 };
 use ttutils::zlib;
 use util::{genlog, p};
 
-lazy_static! {
-    static ref POOL: ThreadPool = pnk!(util::gen_thread_pool(Some(8)));
-    static ref CFG: &'static cfg::Cfg = pnk!(cfg::register_cfg(None));
-    static ref SERV: Arc<ttcore::Serv> =
-        Arc::new(ttcore::Serv::new(&CFG.cfgdb_path));
-    static ref SOCK: UdpSocket = pnk!(UdpSocket::bind(&CFG.serv_at).c(d!()));
-}
+static POOL: LazyLock<ThreadPool> = LazyLock::new(|| pnk!(util::gen_thread_pool(Some(8))));
+static CFG: LazyLock<&'static cfg::Cfg> = LazyLock::new(|| pnk!(cfg::register_cfg(None)));
+static SERV: LazyLock<Arc<ttcore::Serv>> = LazyLock::new(|| Arc::new(ttcore::Serv::new(&CFG.cfgdb_path)));
+static SOCK: LazyLock<UdpSocket> = LazyLock::new(|| pnk!(UdpSocket::bind(&CFG.serv_at).c(d!())));
 
 /// 服务启动入口
 pub fn start(cfg: cfg::Cfg) -> ruc::Result<()> {
@@ -45,11 +41,11 @@ fn run() -> ruc::Result<()> {
     // 必须在 clone 调用之后执行,
     // 否则会导致 POOL 在父进程中被初始化,
     // 进入子进程后只会保留一个主线程,
-    // 且 lazy_static 不会再次初始化线程池.
+    // 且 LazyLock 不会再次初始化线程池.
     init::start_cron();
 
     // 必须在 clone 调用之后执行,
-    // 同样是因为 lazy_static 所限,
+    // 同样是因为 LazyLock 所限,
     load_exists().c(d!())?;
 
     // (C/S) 网络交互
@@ -96,7 +92,7 @@ fn start_netserv() -> ! {
                     });
                     Ok(())
                 })
-                .unwrap_or_else(|e| p(e));
+                .unwrap_or_else(|e| { p(e); });
         }
     }
 }

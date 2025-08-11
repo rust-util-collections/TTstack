@@ -13,6 +13,7 @@ use std::{
     fs::{self, File},
     io::Write,
     net::SocketAddr,
+    os::fd::BorrowedFd,
     net::TcpStream,
     os::unix::io::{FromRawFd, IntoRawFd, RawFd},
     process, thread,
@@ -26,10 +27,11 @@ pub fn serv_cmd(serv_addr: &str) -> ruc::Result<()> {
 
     set_reuse(sock).c(d!())?;
 
-    let serv_addr: SockaddrIn = serv_addr
-        .parse::<SocketAddr>()
-        .c(d!())?
-        .into();
+    let socket_addr = serv_addr.parse::<SocketAddr>().c(d!())?;
+    let serv_addr: SockaddrIn = match socket_addr {
+        SocketAddr::V4(addr) => addr.into(),
+        SocketAddr::V6(_) => return Err(eg!("IPv6 addresses not supported")),
+    };
 
     socket::bind(sock, &serv_addr).c(d!())?;
 
@@ -71,15 +73,15 @@ fn run_cmd(cmd: Vec<u8>, sock: RawFd, peeraddr: SockaddrStorage) -> ruc::Result<
     let mut resp = Resp::default();
 
     let stdout_path =
-        format!("/tmp/.{}_{}_{}.stdout", peeraddr.to_string(), sock, ts!());
+        format!("/tmp/.{}_{}_{}.stdout", peeraddr, sock, ts!());
     let stderr_path =
-        format!("/tmp/.{}_{}_{}.stderr", peeraddr.to_string(), sock, ts!());
+        format!("/tmp/.{}_{}_{}.stderr", peeraddr, sock, ts!());
     let cmd = String::from_utf8_lossy(&cmd).into_owned();
     let cmd = format!("({}) >{} 2>{}", cmd, stdout_path, stderr_path);
 
     let res = check_err!(
         process::Command::new("sh")
-            .args(&["-c", &cmd])
+            .args(["-c", &cmd])
             .spawn()
             .c(d!())
             .and_then(|mut child| child.wait().c(d!()))
@@ -116,13 +118,17 @@ pub fn serv_transfer(serv_addr: &str) -> ruc::Result<()> {
 
     set_reuse(sock).c(d!())?;
 
-    let serv_addr: SockaddrIn = serv_addr
-        .parse::<SocketAddr>()
-        .c(d!())?
-        .into();
+    let socket_addr2 = serv_addr.parse::<SocketAddr>().c(d!())?;
+    let serv_addr: SockaddrIn = match socket_addr2 {
+        SocketAddr::V4(addr) => addr.into(),
+        SocketAddr::V6(_) => return Err(eg!("IPv6 addresses not supported")),
+    };
 
     socket::bind(sock, &serv_addr).c(d!())?;
-    socket::listen(&sock, Backlog::new(8).c(d!())?).c(d!())?;
+    
+    // Convert RawFd to BorrowedFd for listen
+    let borrowed_sock = unsafe { BorrowedFd::borrow_raw(sock) };
+    socket::listen(&borrowed_sock, Backlog::new(8).c(d!())?).c(d!())?;
 
     loop {
         if let Ok(fd) = info!(socket::accept(sock)) {
@@ -194,10 +200,7 @@ fn do_serv_transfer(sock: RawFd) -> ruc::Result<()> {
     )?;
 
     alt!(4096 < req_size, return Err(eg!("Maybe an attack!")));
-    let mut req_buf = Vec::with_capacity(req_size);
-    unsafe {
-        req_buf.set_len(req_buf.capacity());
-    }
+    let mut req_buf = vec![0u8; req_size];
     let recvd =
         check_err!(socket::recv(sock, &mut req_buf, MsgFlags::empty()))?;
     let req =
@@ -215,10 +218,7 @@ fn do_serv_transfer(sock: RawFd) -> ruc::Result<()> {
             );
             let mut file = check_err!(file)?;
             let mut file_buf =
-                Vec::with_capacity(alt!(siz > SIZE_16MB, SIZE_16MB, siz));
-            unsafe {
-                file_buf.set_len(file_buf.capacity());
-            }
+                vec![0u8; alt!(siz > SIZE_16MB, SIZE_16MB, siz)];
             let mut recvd;
             while siz > 0 {
                 recvd = check_err!(socket::recv(
@@ -238,8 +238,10 @@ fn do_serv_transfer(sock: RawFd) -> ruc::Result<()> {
             }
 
             // File uploaded by client has been stored, reply status
-            let mut resp = Resp::default();
-            resp.stdout = Cow::Borrowed("Success!");
+            let resp = Resp {
+                stdout: Cow::Borrowed("Success!"),
+                ..Default::default()
+            };
             send_back!(resp);
         }
         Direction::Get => {
@@ -264,9 +266,10 @@ fn do_serv_transfer(sock: RawFd) -> ruc::Result<()> {
 
 /// reuse addr and port
 fn set_reuse(sock: RawFd) -> ruc::Result<()> {
-    socket::setsockopt(sock, socket::sockopt::ReuseAddr, &true)
+    let borrowed_fd = unsafe { BorrowedFd::borrow_raw(sock) };
+    socket::setsockopt(&borrowed_fd, socket::sockopt::ReuseAddr, &true)
         .c(d!())
         .and_then(|_| {
-            socket::setsockopt(sock, socket::sockopt::ReusePort, &true).c(d!())
+            socket::setsockopt(&borrowed_fd, socket::sockopt::ReusePort, &true).c(d!())
         })
 }

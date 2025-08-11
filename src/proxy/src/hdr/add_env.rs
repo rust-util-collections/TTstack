@@ -5,6 +5,7 @@
 //!
 
 use super::*;
+use crate::util::genlog;
 use std::{collections::HashSet, mem};
 
 #[derive(Clone, Debug, Deserialize)]
@@ -19,7 +20,7 @@ struct MyReq {
 /// 要分割资源之后再分发
 pub(super) fn add_env(
     ops_id: usize,
-    peeraddr: SockAddr,
+    peeraddr: SockaddrStorage,
     request: Vec<u8>,
 ) -> ruc::Result<()> {
     let mut req = serde_json::from_slice::<MyReq>(&request).c(d!())?;
@@ -100,7 +101,7 @@ pub(super) fn add_env(
 fn send_req(
     ops_id: usize,
     mut req: MyReq,
-    peeraddr: SockAddr,
+    peeraddr: SockaddrStorage,
     jobs: Vec<(SocketAddr, Vec<VmCfgProxy>)>,
 ) -> ruc::Result<()> {
     let num_to_wait = jobs.len();

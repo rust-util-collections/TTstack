@@ -9,11 +9,10 @@
 mod add_env;
 pub(crate) mod sync;
 
-use crate::{def::*, send_err, send_ok, CFG, PROXY, SOCK_MID};
+use crate::{def::*, send_err, send_ok, CFG, PROXY, SOCK_MID, util::{p, genlog}};
 use add_env::add_env;
 use async_std::{net::SocketAddr, task};
-use lazy_static::lazy_static;
-use ruc::{*, err::*};
+use ruc::*;
 use nix::sys::socket::SockaddrStorage;
 use parking_lot::RwLock;
 use serde::Deserialize;
@@ -23,25 +22,23 @@ use std::{
     mem,
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc,
+        Arc, LazyLock,
     },
 };
 use ttserver_def::*;
 use ttutils::zlib;
 
-lazy_static! {
-    static ref ENV_MAP: Arc<RwLock<HashMap<EnvId, Vec<SocketAddr>>>> =
-        Arc::new(RwLock::new(map! {}));
-    static ref SLAVE_INFO: Arc<RwLock<HashMap<SocketAddr, RespGetServerInfo>>> =
-        Arc::new(RwLock::new(map! {}));
-}
+static ENV_MAP: LazyLock<Arc<RwLock<HashMap<EnvId, Vec<SocketAddr>>>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(map! {})));
+static SLAVE_INFO: LazyLock<Arc<RwLock<HashMap<SocketAddr, RespGetServerInfo>>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(map! {})));
 
-type Ops = fn(usize, SockAddr, Vec<u8>) -> ruc::Result<()>;
+type Ops = fn(usize, SockaddrStorage, Vec<u8>) -> ruc::Result<()>;
 include!("../../../server_def/src/included_ops_map.rs");
 
 /// Distribute client requests
 /// to various background Slave Servers.
-#[macro_export(crate)]
+#[macro_export]
 macro_rules! fwd_to_slave {
     (@@@$ops_id: expr, $req: expr, $peeraddr: expr, $cb: tt, $addr_set: expr) => {{
         let num_to_wait = $addr_set.len();
@@ -77,7 +74,7 @@ macro_rules! fwd_to_slave {
 /// This interface is implemented in Proxy as "do nothing, directly return success".
 pub(crate) fn register_client_id(
     _ops_id: usize,
-    peeraddr: SockAddr,
+    peeraddr: SockaddrStorage,
     request: Vec<u8>,
 ) -> ruc::Result<()> {
     let req = serde_json::from_slice::<Req<&str>>(&request).c(d!())?;
@@ -93,7 +90,7 @@ pub(crate) fn register_client_id(
 /// directly extracted from scheduled task results, no real-time requests.
 pub(crate) fn get_server_info(
     ops_id: usize,
-    peeraddr: SockAddr,
+    peeraddr: SockaddrStorage,
     request: Vec<u8>,
 ) -> ruc::Result<()> {
     // Aggregate information from various Slaves
@@ -110,7 +107,7 @@ pub(crate) fn get_server_info(
 /// Get summary information of existing Env on server
 pub(crate) fn get_env_list(
     ops_id: usize,
-    peeraddr: SockAddr,
+    peeraddr: SockaddrStorage,
     request: Vec<u8>,
 ) -> ruc::Result<()> {
     // Aggregate information from various Slaves
@@ -127,7 +124,7 @@ pub(crate) fn get_env_list(
 // Get detailed information of existing Env on server
 pub(crate) fn get_env_info(
     ops_id: usize,
-    peeraddr: SockAddr,
+    peeraddr: SockaddrStorage,
     request: Vec<u8>,
 ) -> ruc::Result<()> {
     #[derive(Deserialize)]
@@ -167,7 +164,7 @@ pub(crate) fn get_env_info(
 /// Kick out specified VM instances from existing ENV
 pub(crate) fn update_env_kick_vm(
     ops_id: usize,
-    peeraddr: SockAddr,
+    peeraddr: SockaddrStorage,
     request: Vec<u8>,
 ) -> ruc::Result<()> {
     #[derive(Deserialize)]
@@ -183,7 +180,7 @@ pub(crate) fn update_env_kick_vm(
 /// 更新已有 Env 的生命周期
 pub(crate) fn update_env_lifetime(
     ops_id: usize,
-    peeraddr: SockAddr,
+    peeraddr: SockaddrStorage,
     request: Vec<u8>,
 ) -> ruc::Result<()> {
     #[derive(Deserialize)]
@@ -205,7 +202,7 @@ pub(crate) fn update_env_lifetime(
 /// 删除 Env
 pub(crate) fn del_env(
     ops_id: usize,
-    peeraddr: SockAddr,
+    peeraddr: SockaddrStorage,
     request: Vec<u8>,
 ) -> ruc::Result<()> {
     #[derive(Deserialize)]
@@ -229,7 +226,7 @@ pub(crate) fn del_env(
 #[inline(always)]
 pub(crate) fn get_env_list_all(
     ops_id: usize,
-    peeraddr: SockAddr,
+    peeraddr: SockaddrStorage,
     request: Vec<u8>,
 ) -> ruc::Result<()> {
     get_env_list(ops_id, peeraddr, request).c(d!())
@@ -241,7 +238,7 @@ pub(crate) fn get_env_list_all(
 /// - 资源计数递减
 pub(crate) fn stop_env(
     ops_id: usize,
-    peeraddr: SockAddr,
+    peeraddr: SockaddrStorage,
     request: Vec<u8>,
 ) -> ruc::Result<()> {
     #[derive(Deserialize)]
@@ -259,7 +256,7 @@ pub(crate) fn stop_env(
 /// - 资源计数递增
 pub(crate) fn start_env(
     ops_id: usize,
-    peeraddr: SockAddr,
+    peeraddr: SockaddrStorage,
     request: Vec<u8>,
 ) -> ruc::Result<()> {
     #[derive(Deserialize)]
@@ -275,7 +272,7 @@ pub(crate) fn start_env(
 /// 更新已有 ENV 中资源配置信息
 pub(crate) fn update_env_resource(
     ops_id: usize,
-    peeraddr: SockAddr,
+    peeraddr: SockaddrStorage,
     request: Vec<u8>,
 ) -> ruc::Result<()> {
     #[derive(Deserialize)]
@@ -290,9 +287,7 @@ pub(crate) fn update_env_resource(
 
 /// 生成不重复的 uuid
 fn gen_proxy_uuid() -> u64 {
-    lazy_static! {
-        static ref UUID: AtomicU64 = AtomicU64::new(9999);
-    }
+    static UUID: LazyLock<AtomicU64> = LazyLock::new(|| AtomicU64::new(9999));
     UUID.fetch_add(1, Ordering::Relaxed)
 }
 
@@ -304,7 +299,7 @@ fn resp_cb_simple(r: &mut SlaveRes) {
             eg!("Not all slave-server[s] reponsed!"),
             r.peeraddr
         )
-        .unwrap_or_else(|e| p(e));
+        .unwrap_or_else(|e| { p(e); });
     } else if r.msg.values().any(|v| v.status == RetStatus::Fail) {
         let msg = r
             .msg
@@ -313,9 +308,9 @@ fn resp_cb_simple(r: &mut SlaveRes) {
             .map(|v| v.to_string())
             .collect::<Vec<_>>()
             .join(" ;; ");
-        send_err!(r.uuid, eg!(msg), r.peeraddr).unwrap_or_else(|e| p(e));
+        send_err!(r.uuid, eg!(msg), r.peeraddr).unwrap_or_else(|e| { p(e); });
     } else {
-        send_ok!(r.uuid, "Success!", r.peeraddr).unwrap_or_else(|e| p(e));
+        send_ok!(r.uuid, "Success!", r.peeraddr).unwrap_or_else(|e| { p(e); });
     }
 }
 
@@ -390,7 +385,7 @@ fn send_req_to_slave<T: Serialize>(
 fn register_resp_hdr(
     num_to_wait: usize,
     cb: fn(&mut SlaveRes),
-    peeraddr: SockAddr,
+    peeraddr: SockaddrStorage,
     orig_uuid: UUID,
     proxy_uuid: UUID,
 ) {

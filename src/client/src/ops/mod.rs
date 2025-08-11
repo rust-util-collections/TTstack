@@ -23,34 +23,32 @@ pub mod env;
 pub mod status;
 
 use crate::CFG;
-use lazy_static::lazy_static;
 use ruc::*;
 use serde::Serialize;
 use std::{
     collections::HashMap,
     net::{SocketAddr, UdpSocket},
+    sync::LazyLock,
     time::Duration,
 };
 pub(self) use ttserver_def::*;
 use ttutils::zlib;
 
-lazy_static! {
-    static ref OPS_MAP: HashMap<&'static str, u8> = map! {
-        "register_client_id" => 0,
-        "get_server_info" => 1,
-        "get_env_list" => 2,
-        "get_env_info" => 3,
-        "add_env" => 4,
-        "del_env" => 5,
-        "update_env_lifetime" => 6,
-        "update_env_kick_vm" => 7,
-        "get_env_list_all" => 8,
-        "stop_env" => 9,
-        "start_env" => 10,
-        "update_env_resource" => 11,
-    };
-    static ref SOCK: UdpSocket = pnk!(gen_sock(8));
-}
+static OPS_MAP: LazyLock<HashMap<&'static str, u8>> = LazyLock::new(|| map! {
+    "register_client_id" => 0,
+    "get_server_info" => 1,
+    "get_env_list" => 2,
+    "get_env_info" => 3,
+    "add_env" => 4,
+    "del_env" => 5,
+    "update_env_lifetime" => 6,
+    "update_env_kick_vm" => 7,
+    "get_env_list_all" => 8,
+    "stop_env" => 9,
+    "start_env" => 10,
+    "update_env_resource" => 11,
+});
+static SOCK: LazyLock<UdpSocket> = LazyLock::new(|| pnk!(gen_sock(8)));
 
 /// 解析返回的结果
 #[macro_export]

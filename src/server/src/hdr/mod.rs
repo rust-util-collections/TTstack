@@ -8,7 +8,7 @@ pub(crate) mod server;
 
 use super::{send_err, send_ok, SERV};
 use crate::{def::*, CFG, util::{genlog, p}};
-use ruc::{*, err::*};
+use ruc::*;
 use serde::Deserialize;
 use std::{
     mem,

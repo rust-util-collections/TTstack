@@ -88,7 +88,7 @@ pub struct SlaveRes {
     pub do_resp: fn(&mut SlaveRes),
     /// Client 的地址,
     /// do_resp 处理完后回复到此地址
-    pub peeraddr: SockAddr,
+    pub peeraddr: SockaddrStorage,
     /// Clent 的 ReqId,
     /// 回复 Client 时会用到
     pub uuid: UUID,

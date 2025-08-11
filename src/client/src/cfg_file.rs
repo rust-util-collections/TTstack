@@ -2,19 +2,16 @@
 //! # Cfg File
 //!
 
-use lazy_static::lazy_static;
 use ruc::*;
 use serde::{Deserialize, Serialize};
-use std::{env, fs, net::SocketAddr, path};
+use std::{env, fs, net::SocketAddr, path, sync::LazyLock};
 
-lazy_static! {
-    /// 客户端配置路径
-    pub static ref CFG_PATH: String = format!("{}/.tt",pnk!(env::var("HOME")));
-    /// 客户端配置文件
-    pub static ref CFG_FILE: String = format!("{}/tt.json", CFG_PATH.as_str());
-    /// 客户端配置信息
-    pub static ref CFG: Cfg = pnk!(read_cfg());
-}
+/// 客户端配置路径
+pub static CFG_PATH: LazyLock<String> = LazyLock::new(|| format!("{}/.tt",pnk!(env::var("HOME"))));
+/// 客户端配置文件
+pub static CFG_FILE: LazyLock<String> = LazyLock::new(|| format!("{}/tt.json", CFG_PATH.as_str()));
+/// 客户端配置信息
+pub static CFG: LazyLock<Cfg> = LazyLock::new(|| pnk!(read_cfg()));
 
 /// 后续支持同时连接多个 server
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -124,15 +121,13 @@ wUVL9Lu+n7huI+GtsmATdhUYlzE/K8nNmhJuw3abrGPPUgrtx5OE
 const SSH_SETTING: &str = "StrictHostKeyChecking no
 UserKnownHostsFile /dev/null";
 
-lazy_static! {
-    static ref SSH_CFG_DIR: String =
-        format!("{}/.ssh", pnk!(env::var("HOME")));
-    static ref SSH_CFG_FILE: String =
-        format!("{}/config", SSH_CFG_DIR.as_str());
-    /// 连接 VM 所用的私钥在 client 上的路径
-    pub static ref SSH_VM_KEY: String =
-        format!("{}/tt_rsa", SSH_CFG_DIR.as_str());
-}
+static SSH_CFG_DIR: LazyLock<String> =
+    LazyLock::new(|| format!("{}/.ssh", pnk!(env::var("HOME"))));
+static SSH_CFG_FILE: LazyLock<String> =
+    LazyLock::new(|| format!("{}/config", SSH_CFG_DIR.as_str()));
+/// 连接 VM 所用的私钥在 client 上的路径
+pub static SSH_VM_KEY: LazyLock<String> =
+    LazyLock::new(|| format!("{}/tt_rsa", SSH_CFG_DIR.as_str()));
 
 /// 确保无交互的建立 SSH 连接
 fn set_sshenv() -> Result<()> {

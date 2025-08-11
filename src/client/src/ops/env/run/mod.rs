@@ -11,10 +11,9 @@ pub mod ttrexec;
 
 use super::{super::EnvIdRef, show};
 use crate::ops::{SSH_PORT, TTREXEC_PORT};
-use lazy_static::lazy_static;
 use ruc::*;
 use std::{
-    fs, mem, sync::mpsc::Receiver, sync::Mutex, thread, time::Duration,
+    fs, mem, sync::{mpsc::Receiver, Mutex, LazyLock}, thread, time::Duration,
 };
 
 ///////////////////////////////
@@ -188,9 +187,7 @@ impl VmConnInfo {
 }
 
 pub fn print_to_user(r: VmConnInfo) {
-    lazy_static! {
-        static ref LK: Mutex<()> = Mutex::new(());
-    }
+    static LK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
     if LK.lock().is_ok() {
         let width = 3;

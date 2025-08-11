@@ -21,13 +21,14 @@ use std::{
 pub fn req_exec<'a>(remote_addr: &'a str, cmd: &'a str) -> ruc::Result<Resp<'a>> {
     let socket = gen_udp_sock().c(d!())?;
     let sock = *socket;
-    let peeraddr: SockaddrIn = remote_addr
-        .parse::<SocketAddr>()
-        .c(d!())?
-        .into();
+    let socket_addr = remote_addr.parse::<SocketAddr>().c(d!())?;
+    let peeraddr: SockaddrIn = match socket_addr {
+        SocketAddr::V4(addr) => addr.into(),
+        SocketAddr::V6(_) => return Err(eg!("IPv6 addresses not supported")),
+    };
     let req = cmd.as_bytes();
 
-    socket::sendto(sock, &req, &peeraddr, MsgFlags::empty())
+    socket::sendto(sock, req, &peeraddr, MsgFlags::empty())
         .c(d!())
         .and_then(|_| {
             let mut buf = vec![0; 4 * 4096];
@@ -95,11 +96,7 @@ pub fn req_transfer<'a>(
         sendfile(local_fd, sock, request.file_size).c(d!())?;
     }
 
-    let mut buf = Vec::with_capacity(4 * 4096);
-
-    unsafe {
-        buf.set_len(TRANS_META_WIDTH);
-    }
+    let mut buf = vec![0u8; TRANS_META_WIDTH];
     let recvd = socket::recv(sock, &mut buf, MsgFlags::empty()).c(d!())?;
     let resp_size = String::from_utf8_lossy(&buf[..recvd])
         .parse::<usize>()

@@ -26,15 +26,12 @@ pub use start::*;
 pub use stop::*;
 pub use update::*;
 
-use lazy_static::lazy_static;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, LazyLock};
 use threadpool::ThreadPool;
 
-lazy_static! {
-    // 传输文件时并发太多没有意义,
-    // 使用小规模的线程池限制并发数量
-    static ref POOL: Pool = Pool::new(3);
-}
+// 传输文件时并发太多没有意义,
+// 使用小规模的线程池限制并发数量
+static POOL: LazyLock<Pool> = LazyLock::new(|| Pool::new(3));
 
 struct Pool {
     inner: Arc<Mutex<ThreadPool>>,

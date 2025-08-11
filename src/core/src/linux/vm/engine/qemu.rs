@@ -10,31 +10,28 @@ use crate::{
 };
 #[cfg(feature = "zfs")]
 use crate::{CLONE_MARK, ZFS_ROOT};
-use lazy_static::lazy_static;
 use ruc::*;
-use std::fs;
+use std::{fs, sync::LazyLock};
 
 #[cfg(feature = "nft")]
 pub(super) const BRIDGE: &str = "ttcore-bridge";
 
-lazy_static! {
-    static ref IOMMU: &'static str = {
-        pnk!(
-            fs::read("/proc/cpuinfo")
-                .c(d!())
-                .and_then(|c| String::from_utf8(c).c(d!()))
-                .and_then(|cpuinfo| {
-                    if cpuinfo.contains(" svm ") {
-                        Ok("amd-iommu")
-                    } else if cpuinfo.contains(" vmx ") {
-                        Ok("intel-iommu")
-                    } else {
-                        Err(eg!("Unsupported platform!"))
-                    }
-                })
-        )
-    };
-}
+static IOMMU: LazyLock<&'static str> = LazyLock::new(|| {
+    pnk!(
+        fs::read("/proc/cpuinfo")
+            .c(d!())
+            .and_then(|c| String::from_utf8(c).c(d!()))
+            .and_then(|cpuinfo| {
+                if cpuinfo.contains(" svm ") {
+                    Ok("amd-iommu")
+                } else if cpuinfo.contains(" vmx ") {
+                    Ok("intel-iommu")
+                } else {
+                    Err(eg!("Unsupported platform!"))
+                }
+            })
+    )
+});
 
 /// 设置基本运行环境
 /// firecracker also need this!

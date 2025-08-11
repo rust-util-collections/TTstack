@@ -5,7 +5,7 @@
 use crate::{def::*, POOL, SOCK};
 use futures::executor::{ThreadPool, ThreadPoolBuilder};
 use futures_timer::Delay;
-use ruc::{*, err::*};
+use ruc::*;
 use serde::Serialize;
 use std::{net::SocketAddr, time::Duration};
 use ttutils::zlib;
@@ -30,7 +30,7 @@ pub(crate) fn gen_thread_pool(n: Option<u8>) -> ruc::Result<ThreadPool> {
 }
 
 /// 回送成功信息
-#[macro_export(crate)]
+#[macro_export]
 macro_rules! send_ok {
     ($uuid: expr, $msg: expr, $peeraddr: expr) => {
         $crate::util::send_back(
@@ -50,7 +50,7 @@ pub(crate) fn gen_resp_ok(uuid: u64, msg: impl Serialize) -> Resp {
 }
 
 /// 回送失败信息
-#[macro_export(crate)]
+#[macro_export]
 macro_rules! send_err {
     ($uuid: expr, $err: expr, $peeraddr: expr) => {{
         let log = genlog($err);
@@ -59,7 +59,7 @@ macro_rules! send_err {
             $peeraddr,
         )
         .c(d!(&log))
-        .map(|_| p(eg!(log)))
+        .map_err(|e| { p(eg!(log)); e })
     }};
 }
 

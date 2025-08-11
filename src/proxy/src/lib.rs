@@ -19,36 +19,33 @@ use async_std::{
     task,
 };
 use def::Proxy;
-use lazy_static::lazy_static;
-use ruc::{*, err::*};
+use ruc::*;
 use parking_lot::Mutex;
 use std::{
     os::unix::io::{IntoRawFd, RawFd},
     sync::atomic::{AtomicU32, Ordering},
-    sync::mpsc::channel,
+    sync::{mpsc::channel, LazyLock},
     thread,
     time::Duration,
 };
 use ttserver_def::*;
 use ttutils::zlib;
+use util::{p, genlog};
 
 // recv timeout in seconds
 const RECV_TO_SECS: u64 = 12;
 
-lazy_static! {
-    static ref CFG: &'static cfg::Cfg = pnk!(cfg::register_cfg(None));
-    /// 与客户端交互
-    static ref SOCK: UdpSocket = pnk!(gen_master_sock());
-    /// HTTP 与 UDP 发来的客户端消息, 处理流程一致,
-    /// 都经由此 Unix(Unix Domain) Abstract Socket 中转
-    static ref SOCK_UAU: RawFd = pnk!(util::gen_uau_socket(include_bytes!("uau.addr"))).0.into_raw_fd();
-    /// 与后端的 TT Slave 服务端交互
-    static ref SOCK_MID: UdpSocket = pnk!(gen_middle_sock());
-    static ref PROXY: Arc<Mutex<Proxy>> =
-        Arc::new(Mutex::new(Proxy::default()));
-    /// Number bytes will be used as an uau address
-    static ref UAU_ID: AtomicU32 = AtomicU32::new(0);
-}
+static CFG: LazyLock<&'static cfg::Cfg> = LazyLock::new(|| pnk!(cfg::register_cfg(None)));
+/// 与客户端交互
+static SOCK: LazyLock<UdpSocket> = LazyLock::new(|| pnk!(gen_master_sock()));
+/// HTTP 与 UDP 发来的客户端消息, 处理流程一致,
+/// 都经由此 Unix(Unix Domain) Abstract Socket 中转
+static SOCK_UAU: LazyLock<RawFd> = LazyLock::new(|| pnk!(util::gen_uau_socket(include_bytes!("uau.addr"))).0.into_raw_fd());
+/// 与后端的 TT Slave 服务端交互
+static SOCK_MID: LazyLock<UdpSocket> = LazyLock::new(|| pnk!(gen_middle_sock()));
+static PROXY: LazyLock<Arc<Mutex<Proxy>>> = LazyLock::new(|| Arc::new(Mutex::new(Proxy::default())));
+/// Number bytes will be used as an uau address
+static UAU_ID: LazyLock<AtomicU32> = LazyLock::new(|| AtomicU32::new(0));
 
 /// Entry Point
 pub fn start(cfg: cfg::Cfg) -> ruc::Result<()> {
@@ -176,7 +173,7 @@ fn start_serv_udp() {
                         });
                         Ok(())
                     })
-                    .unwrap_or_else(|e| p(e));
+                    .unwrap_or_else(|e| { p(e); });
             }
         }
     });

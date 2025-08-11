@@ -11,7 +11,7 @@ use ruc::*;
 use nix::sys::sendfile::sendfile as sf;
 #[cfg(target_os = "freebsd")]
 use nix::sys::sendfile::SfFlags;
-use std::os::unix::io::RawFd;
+use std::os::unix::io::{RawFd, BorrowedFd};
 
 #[cfg(target_os = "linux")]
 pub(crate) fn sendfile(
@@ -21,8 +21,10 @@ pub(crate) fn sendfile(
 ) -> ruc::Result<()> {
     let mut offset = 0;
     loop {
+        let file_borrowed = unsafe { BorrowedFd::borrow_raw(file_fd) };
+        let sock_borrowed = unsafe { BorrowedFd::borrow_raw(sock_fd) };
         let sendsiz =
-            sf(sock_fd, file_fd, Some(&mut offset), file_size).c(d!())?;
+            sf(sock_borrowed, file_borrowed, Some(&mut offset), file_size).c(d!())?;
         if 0 == sendsiz {
             break;
         }
@@ -38,9 +40,11 @@ pub(crate) fn sendfile(
 ) -> ruc::Result<()> {
     let mut offset = 0;
     loop {
+        let file_borrowed = unsafe { BorrowedFd::borrow_raw(file_fd) };
+        let sock_borrowed = unsafe { BorrowedFd::borrow_raw(sock_fd) };
         let (res, sendsiz) = sf(
-            file_fd,
-            sock_fd,
+            file_borrowed,
+            sock_borrowed,
             offset,
             Some(file_size),
             None,
@@ -66,8 +70,10 @@ pub(crate) fn sendfile(
 ) -> ruc::Result<()> {
     let mut offset = 0;
     loop {
+        let file_borrowed = unsafe { BorrowedFd::borrow_raw(file_fd) };
+        let sock_borrowed = unsafe { BorrowedFd::borrow_raw(sock_fd) };
         let (res, sendsiz) =
-            sf(file_fd, sock_fd, offset, Some(file_size as i64), None, None);
+            sf(file_borrowed, sock_borrowed, offset, Some(file_size as i64), None, None);
         res.c(d!())?;
         if 0 == sendsiz {
             break;
