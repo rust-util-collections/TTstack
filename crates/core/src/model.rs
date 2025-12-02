@@ -1,0 +1,371 @@
+//! Data models for TTstack.
+//!
+//! All persistent types are serde-serializable for use with vsdb storage
+//! and JSON API communication.
+
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::fmt;
+
+// ── Engine & Backend Enums ──────────────────────────────────────────
+
+/// Supported hypervisor / container engines.
+///
+/// Platform availability:
+/// - **Linux**: Qemu, Firecracker, Docker
+/// - **FreeBSD**: Bhyve, Jail
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Engine {
+    Qemu,
+    Firecracker,
+    Bhyve,
+    Docker,
+    Jail,
+}
+
+impl fmt::Display for Engine {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Qemu => write!(f, "qemu"),
+            Self::Firecracker => write!(f, "firecracker"),
+            Self::Bhyve => write!(f, "bhyve"),
+            Self::Docker => write!(f, "docker"),
+            Self::Jail => write!(f, "jail"),
+        }
+    }
+}
+
+impl std::str::FromStr for Engine {
+    type Err = Box<dyn std::error::Error>;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "qemu" | "kvm" => Ok(Self::Qemu),
+            "firecracker" | "fc" => Ok(Self::Firecracker),
+            "bhyve" => Ok(Self::Bhyve),
+            "docker" | "podman" => Ok(Self::Docker),
+            "jail" => Ok(Self::Jail),
+            _ => Err(format!("unknown engine: {s}").into()),
+        }
+    }
+}
+
+/// Storage backend for VM / container images.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Storage {
+    Zfs,
+    Btrfs,
+    Raw,
+}
+
+impl fmt::Display for Storage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Zfs => write!(f, "zfs"),
+            Self::Btrfs => write!(f, "btrfs"),
+            Self::Raw => write!(f, "raw"),
+        }
+    }
+}
+
+impl std::str::FromStr for Storage {
+    type Err = Box<dyn std::error::Error>;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "zfs" => Ok(Self::Zfs),
+            "btrfs" => Ok(Self::Btrfs),
+            "raw" | "file" => Ok(Self::Raw),
+            _ => Err(format!("unknown storage backend: {s}").into()),
+        }
+    }
+}
+
+// ── State Enums ─────────────────────────────────────────────────────
+
+/// Runtime state of a VM or container.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum VmState {
+    Running,
+    Stopped,
+    Creating,
+    Failed,
+}
+
+impl fmt::Display for VmState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Running => write!(f, "running"),
+            Self::Stopped => write!(f, "stopped"),
+            Self::Creating => write!(f, "creating"),
+            Self::Failed => write!(f, "failed"),
+        }
+    }
+}
+
+/// State of an environment (group of VMs).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EnvState {
+    Active,
+    Stopped,
+}
+
+/// Online status of a physical host.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HostState {
+    Online,
+    Offline,
+}
+
+// ── Resource Tracking ───────────────────────────────────────────────
+
+/// Aggregated resource information for a host.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Resource {
+    pub cpu_total: u32,
+    pub cpu_used: u32,
+    /// Total memory in MB.
+    pub mem_total: u32,
+    /// Used memory in MB.
+    pub mem_used: u32,
+    /// Total disk in MB.
+    pub disk_total: u32,
+    /// Used disk in MB.
+    pub disk_used: u32,
+    /// Number of active VMs / containers.
+    pub vm_count: u32,
+}
+
+impl Resource {
+    pub fn cpu_free(&self) -> u32 {
+        self.cpu_total.saturating_sub(self.cpu_used)
+    }
+
+    pub fn mem_free(&self) -> u32 {
+        self.mem_total.saturating_sub(self.mem_used)
+    }
+
+    pub fn disk_free(&self) -> u32 {
+        self.disk_total.saturating_sub(self.disk_used)
+    }
+
+    /// Check whether the host can accommodate the given requirement.
+    pub fn can_fit(&self, cpu: u32, mem: u32, disk: u32) -> bool {
+        self.cpu_free() >= cpu && self.mem_free() >= mem && self.disk_free() >= disk
+    }
+}
+
+// ── Core Entities ───────────────────────────────────────────────────
+
+/// A physical host in the fleet.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Host {
+    pub id: String,
+    /// Agent listen address, e.g. "10.0.0.1:9100".
+    pub addr: String,
+    pub resource: Resource,
+    pub state: HostState,
+    /// Engines available on this host.
+    pub engines: Vec<Engine>,
+    /// Storage backend used on this host.
+    pub storage: Storage,
+    pub registered_at: u64,
+}
+
+/// A VM or container instance managed by an agent.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Vm {
+    pub id: String,
+    pub env_id: String,
+    pub host_id: String,
+    pub image: String,
+    pub engine: Engine,
+    /// Number of vCPUs.
+    pub cpu: u32,
+    /// Memory in MB.
+    pub mem: u32,
+    /// Disk in MB.
+    pub disk: u32,
+    /// Internal IP (on the host bridge).
+    pub ip: String,
+    /// guest_port → host_port mapping.
+    pub port_map: BTreeMap<u16, u16>,
+    pub state: VmState,
+    pub created_at: u64,
+}
+
+/// An environment — a logical group of related VMs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Env {
+    pub id: String,
+    pub owner: String,
+    pub vm_ids: Vec<String>,
+    pub created_at: u64,
+    /// Unix timestamp after which the env auto-expires (0 = never).
+    pub expires_at: u64,
+    pub state: EnvState,
+}
+
+// ── Default VM Sizing ───────────────────────────────────────────────
+
+/// Default number of vCPUs per VM.
+pub const VM_CPU_DEFAULT: u32 = 2;
+/// Default memory per VM in MB.
+pub const VM_MEM_DEFAULT: u32 = 1024;
+/// Default disk per VM in MB (40 GB).
+pub const VM_DISK_DEFAULT: u32 = 40 * 1024;
+/// Maximum environment lifetime in seconds (6 hours).
+pub const MAX_LIFETIME: u64 = 6 * 3600;
+/// Maximum hosts in the fleet.
+pub const MAX_HOSTS: usize = 50;
+/// Maximum total VM instances across the fleet.
+pub const MAX_VMS: usize = 1000;
+
+/// Home directory for the ttstack user (runtime data).
+pub const HOME_DIR: &str = "/home/ttstack";
+/// Directory for engine PID files, sockets, and other runtime state.
+pub const RUN_DIR: &str = "/home/ttstack/run";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Engine ──────────────────────────────────────────────────────
+
+    #[test]
+    fn engine_display_roundtrip() {
+        for e in [
+            Engine::Qemu,
+            Engine::Firecracker,
+            Engine::Bhyve,
+            Engine::Docker,
+            Engine::Jail,
+        ] {
+            let s = e.to_string();
+            let parsed: Engine = s.parse().unwrap();
+            assert_eq!(e, parsed);
+        }
+    }
+
+    #[test]
+    fn engine_aliases() {
+        assert_eq!("kvm".parse::<Engine>().unwrap(), Engine::Qemu);
+        assert_eq!("fc".parse::<Engine>().unwrap(), Engine::Firecracker);
+        assert_eq!("podman".parse::<Engine>().unwrap(), Engine::Docker);
+        assert_eq!("QEMU".parse::<Engine>().unwrap(), Engine::Qemu);
+    }
+
+    #[test]
+    fn engine_unknown() {
+        assert!("foobar".parse::<Engine>().is_err());
+    }
+
+    #[test]
+    fn engine_serde_json() {
+        let e = Engine::Firecracker;
+        let json = serde_json::to_string(&e).unwrap();
+        assert_eq!(json, r#""firecracker""#);
+        let back: Engine = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, e);
+    }
+
+    // ── Storage ─────────────────────────────────────────────────────
+
+    #[test]
+    fn storage_display_roundtrip() {
+        for s in [Storage::Zfs, Storage::Btrfs, Storage::Raw] {
+            let text = s.to_string();
+            let parsed: Storage = text.parse().unwrap();
+            assert_eq!(s, parsed);
+        }
+    }
+
+    #[test]
+    fn storage_alias_file() {
+        assert_eq!("file".parse::<Storage>().unwrap(), Storage::Raw);
+    }
+
+    #[test]
+    fn storage_unknown() {
+        assert!("ntfs".parse::<Storage>().is_err());
+    }
+
+    // ── VmState ─────────────────────────────────────────────────────
+
+    #[test]
+    fn vmstate_display() {
+        assert_eq!(VmState::Running.to_string(), "running");
+        assert_eq!(VmState::Stopped.to_string(), "stopped");
+        assert_eq!(VmState::Creating.to_string(), "creating");
+        assert_eq!(VmState::Failed.to_string(), "failed");
+    }
+
+    // ── Resource ────────────────────────────────────────────────────
+
+    #[test]
+    fn resource_free_values() {
+        let r = Resource {
+            cpu_total: 16,
+            cpu_used: 6,
+            mem_total: 32768,
+            mem_used: 8192,
+            disk_total: 500_000,
+            disk_used: 100_000,
+            vm_count: 3,
+        };
+        assert_eq!(r.cpu_free(), 10);
+        assert_eq!(r.mem_free(), 24576);
+        assert_eq!(r.disk_free(), 400_000);
+    }
+
+    #[test]
+    fn resource_free_saturates() {
+        let r = Resource {
+            cpu_total: 4,
+            cpu_used: 10, // over-committed
+            ..Default::default()
+        };
+        assert_eq!(r.cpu_free(), 0); // saturates, no panic
+    }
+
+    #[test]
+    fn resource_can_fit() {
+        let r = Resource {
+            cpu_total: 8,
+            cpu_used: 4,
+            mem_total: 16384,
+            mem_used: 8192,
+            disk_total: 200_000,
+            disk_used: 100_000,
+            vm_count: 2,
+        };
+        assert!(r.can_fit(4, 8192, 100_000)); // exact fit
+        assert!(r.can_fit(1, 1, 1));           // plenty of room
+        assert!(!r.can_fit(5, 1, 1));          // cpu insufficient
+        assert!(!r.can_fit(1, 9000, 1));       // mem insufficient
+        assert!(!r.can_fit(1, 1, 200_000));    // disk insufficient
+    }
+
+    #[test]
+    fn resource_default_is_zero() {
+        let r = Resource::default();
+        assert_eq!(r.cpu_total, 0);
+        assert_eq!(r.vm_count, 0);
+        assert!(!r.can_fit(1, 1, 1));
+    }
+
+    // ── Constants ───────────────────────────────────────────────────
+
+    #[test]
+    fn constants_sane() {
+        assert!(VM_CPU_DEFAULT > 0);
+        assert!(VM_MEM_DEFAULT > 0);
+        assert!(VM_DISK_DEFAULT > 0);
+        assert!(MAX_LIFETIME > 0);
+        assert!(MAX_HOSTS > 0 && MAX_HOSTS <= 100);
+        assert!(MAX_VMS > 0 && MAX_VMS <= 10_000);
+    }
+}

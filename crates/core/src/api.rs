@@ -1,0 +1,255 @@
+//! API request and response types shared between all components.
+
+use crate::model::*;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+// ── Agent API (controller → agent) ─────────────────────────────────
+
+/// Request to create a VM on an agent.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateVmReq {
+    pub vm_id: String,
+    pub env_id: String,
+    pub image: String,
+    pub engine: Engine,
+    pub cpu: u32,
+    pub mem: u32,
+    pub disk: u32,
+    pub ports: Vec<u16>,
+    pub deny_outgoing: bool,
+}
+
+/// Response from agent after creating a VM.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateVmResp {
+    pub vm: Vm,
+}
+
+/// Information reported by an agent about itself.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentInfo {
+    pub host_id: String,
+    pub resource: Resource,
+    pub engines: Vec<Engine>,
+    pub storage: Storage,
+    pub images: Vec<String>,
+}
+
+// ── Controller API (CLI → controller) ──────────────────────────────
+
+/// Specification for a single VM to be created.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VmSpec {
+    pub image: String,
+    #[serde(default = "default_engine")]
+    pub engine: Engine,
+    pub cpu: Option<u32>,
+    pub mem: Option<u32>,
+    pub disk: Option<u32>,
+    #[serde(default)]
+    pub ports: Vec<u16>,
+    #[serde(default)]
+    pub deny_outgoing: bool,
+}
+
+fn default_engine() -> Engine {
+    Engine::Qemu
+}
+
+/// Request to create an environment with one or more VMs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateEnvReq {
+    pub id: String,
+    pub owner: String,
+    pub vms: Vec<VmSpec>,
+    /// Lifetime in seconds; `None` means use server default.
+    pub lifetime: Option<u64>,
+}
+
+/// Full environment details returned to the CLI.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvDetail {
+    pub env: Env,
+    pub vms: Vec<Vm>,
+}
+
+/// Host registration request from CLI or auto-discovery.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterHostReq {
+    pub addr: String,
+}
+
+/// Summary of available images across the fleet.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImageInfo {
+    pub name: String,
+    pub host_id: String,
+}
+
+/// Global status of the fleet.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FleetStatus {
+    pub hosts: u32,
+    pub hosts_online: u32,
+    pub total_vms: u32,
+    pub total_envs: u32,
+    pub cpu_total: u32,
+    pub cpu_used: u32,
+    pub mem_total: u32,
+    pub mem_used: u32,
+    pub disk_total: u32,
+    pub disk_used: u32,
+}
+
+// ── Generic API Wrapper ────────────────────────────────────────────
+
+/// Standard API response envelope.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(serialize = "T: Serialize", deserialize = "T: serde::de::DeserializeOwned"))]
+pub struct ApiResp<T> {
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl<T> ApiResp<T> {
+    pub fn success(data: T) -> Self {
+        Self {
+            ok: true,
+            data: Some(data),
+            error: None,
+        }
+    }
+
+    pub fn err(msg: impl Into<String>) -> Self {
+        Self {
+            ok: false,
+            data: None,
+            error: Some(msg.into()),
+        }
+    }
+}
+
+/// Convenience for responses with no payload.
+pub type ApiRespEmpty = ApiResp<()>;
+
+impl ApiRespEmpty {
+    pub fn ok() -> Self {
+        Self {
+            ok: true,
+            data: None,
+            error: None,
+        }
+    }
+}
+
+/// Vm summary for display (subset of full Vm).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VmSummary {
+    pub id: String,
+    pub image: String,
+    pub engine: Engine,
+    pub state: VmState,
+    pub ip: String,
+    pub port_map: BTreeMap<u16, u16>,
+    pub host_id: String,
+}
+
+impl From<&Vm> for VmSummary {
+    fn from(vm: &Vm) -> Self {
+        Self {
+            id: vm.id.clone(),
+            image: vm.image.clone(),
+            engine: vm.engine,
+            state: vm.state,
+            ip: vm.ip.clone(),
+            port_map: vm.port_map.clone(),
+            host_id: vm.host_id.clone(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn api_resp_success_roundtrip() {
+        let resp = ApiResp::success("hello".to_string());
+        assert!(resp.ok);
+        assert_eq!(resp.data.as_deref(), Some("hello"));
+        assert!(resp.error.is_none());
+
+        let json = serde_json::to_string(&resp).unwrap();
+        let back: ApiResp<String> = serde_json::from_str(&json).unwrap();
+        assert!(back.ok);
+        assert_eq!(back.data, resp.data);
+    }
+
+    #[test]
+    fn api_resp_error() {
+        let resp = ApiResp::<String>::err("boom");
+        assert!(!resp.ok);
+        assert!(resp.data.is_none());
+        assert_eq!(resp.error.as_deref(), Some("boom"));
+    }
+
+    #[test]
+    fn api_resp_empty_ok() {
+        let resp = ApiRespEmpty::ok();
+        assert!(resp.ok);
+        assert!(resp.data.is_none());
+        assert!(resp.error.is_none());
+
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains(r#""ok":true"#));
+        assert!(!json.contains("data"));
+        assert!(!json.contains("error"));
+    }
+
+    #[test]
+    fn api_resp_skip_none_fields() {
+        let resp = ApiResp::success(42u32);
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(!json.contains("error"));
+
+        let resp = ApiResp::<u32>::err("fail");
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(!json.contains("data"));
+    }
+
+    #[test]
+    fn vm_spec_defaults() {
+        let json = r#"{"image": "ubuntu"}"#;
+        let spec: VmSpec = serde_json::from_str(json).unwrap();
+        assert_eq!(spec.image, "ubuntu");
+        assert_eq!(spec.engine, Engine::Qemu); // default
+        assert!(spec.ports.is_empty());
+        assert!(!spec.deny_outgoing);
+    }
+
+    #[test]
+    fn vm_summary_from_vm() {
+        let vm = Vm {
+            id: "vm1".into(),
+            env_id: "env1".into(),
+            host_id: "h1".into(),
+            image: "ubuntu".into(),
+            engine: Engine::Qemu,
+            cpu: 2,
+            mem: 1024,
+            disk: 40960,
+            ip: "10.10.0.1".into(),
+            port_map: BTreeMap::new(),
+            state: VmState::Running,
+            created_at: 0,
+        };
+        let summary = VmSummary::from(&vm);
+        assert_eq!(summary.id, "vm1");
+        assert_eq!(summary.host_id, "h1");
+        assert_eq!(summary.engine, Engine::Qemu);
+    }
+}
