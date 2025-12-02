@@ -1,0 +1,22 @@
+[package]
+name = "tt-agent"
+description = "TTstack host agent — manages VMs and containers on a single physical host."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "tt-agent"
+path = "src/main.rs"
+
+[dependencies]
+ttcore = { path = "../core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ruc = { workspace = true }
+rusqlite = { workspace = true }
+tokio = { workspace = true }
+axum = { workspace = true }
+clap = { workspace = true }
+uuid = { workspace = true }

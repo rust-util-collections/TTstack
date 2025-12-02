@@ -1,0 +1,14 @@
+[package]
+name = "ttcore"
+description = "TTstack core library — models, engine traits, and storage abstractions."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+ruc = { workspace = true }
+uuid = { workspace = true }
+nix = { workspace = true }
