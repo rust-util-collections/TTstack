@@ -1,0 +1,129 @@
+//! TTstack central controller entry point.
+//!
+//! The controller manages the fleet of hosts, schedules VM placement,
+//! and exposes an HTTP API for the CLI client and web interface.
+
+mod config;
+mod db;
+mod handler;
+mod scheduler;
+mod web;
+
+use axum::routing::{get, post};
+use axum::Router;
+use clap::Parser;
+use config::Config;
+use db::Db;
+use handler::CtlState;
+use std::sync::{Arc, Mutex};
+
+#[tokio::main]
+async fn main() {
+    let cfg = Config::parse();
+
+    std::fs::create_dir_all(&cfg.data_dir).unwrap_or_else(|e| {
+        eprintln!("Failed to create data dir {}: {e}", cfg.data_dir);
+        std::process::exit(1);
+    });
+
+    let db_path = format!("{}/ctl.db", cfg.data_dir);
+    let db = Db::open(&db_path).unwrap_or_else(|e| {
+        eprintln!("Failed to open database: {e}");
+        std::process::exit(1);
+    });
+
+    let state: CtlState = Arc::new(Mutex::new(db));
+
+    // Background task: expire old environments
+    let expiry_state = state.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+            expire_envs(&expiry_state).await;
+        }
+    });
+
+    let app = Router::new()
+        // Web dashboard
+        .route("/", get(web::index))
+        // REST API
+        .route(
+            "/api/hosts",
+            get(handler::list_hosts).post(handler::register_host),
+        )
+        .route(
+            "/api/hosts/{id}",
+            get(handler::get_host).delete(handler::remove_host),
+        )
+        .route(
+            "/api/envs",
+            get(handler::list_envs).post(handler::create_env),
+        )
+        .route(
+            "/api/envs/{id}",
+            get(handler::get_env).delete(handler::delete_env),
+        )
+        .route("/api/envs/{id}/stop", post(handler::stop_env))
+        .route("/api/envs/{id}/start", post(handler::start_env))
+        .route("/api/vms/{id}", get(handler::get_vm))
+        .route("/api/images", get(handler::list_images))
+        .route("/api/status", get(handler::fleet_status))
+        .with_state(state);
+
+    let listener = tokio::net::TcpListener::bind(&cfg.listen)
+        .await
+        .unwrap_or_else(|e| {
+            eprintln!("Failed to bind {}: {e}", cfg.listen);
+            std::process::exit(1);
+        });
+
+    eprintln!("tt-ctl listening on {}", cfg.listen);
+
+    axum::serve(listener, app)
+        .await
+        .unwrap_or_else(|e| eprintln!("Server error: {e}"));
+}
+
+/// Periodically destroy expired environments.
+async fn expire_envs(state: &CtlState) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let expired = {
+        let db = state.lock().unwrap();
+        db.list_envs()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|e| e.expires_at > 0 && e.expires_at <= now)
+            .map(|e| e.id)
+            .collect::<Vec<_>>()
+    };
+
+    let client = reqwest::Client::new();
+
+    for env_id in expired {
+        eprintln!("expiring environment: {env_id}");
+
+        let (vms, hosts) = {
+            let db = state.lock().unwrap();
+            let vms = db.vms_by_env(&env_id).unwrap_or_default();
+            let hosts = db.list_hosts().unwrap_or_default();
+            (vms, hosts)
+        };
+
+        for vm in &vms {
+            if let Some(host) = hosts.iter().find(|h| h.id == vm.host_id) {
+                let url = format!("http://{}/api/vms/{}", host.addr, vm.id);
+                let _ = client.delete(&url).send().await;
+            }
+        }
+
+        let db = state.lock().unwrap();
+        for vm in &vms {
+            let _ = db.remove_vm(&vm.id);
+        }
+        let _ = db.remove_env(&env_id);
+    }
+}
