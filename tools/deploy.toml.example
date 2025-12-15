@@ -1,0 +1,116 @@
+# TTstack distributed deployment configuration
+#
+# Copy to deploy.toml, edit to match your fleet, then run:
+#   ./tools/deploy.sh -c deploy.toml
+#
+# All fields have sensible defaults — only [controller].host and
+# [[agents]].host are required. Everything else can be omitted.
+
+[general]
+prefix      = "/opt/ttstack"    # Install path on all hosts
+user        = "ttstack"         # Runtime user (created if absent)
+release_dir = "./target/release" # Local path to compiled binaries
+
+# ── Controller ───────────────────────────────────────────────────────
+# One controller per fleet. Hosts the REST API and web dashboard.
+
+[controller]
+host     = "10.0.0.1"          # REQUIRED — controller IP or hostname
+# ssh_user = "root"            # Default: root
+# ssh_port = 22                # Default: 22
+# listen   = "0.0.0.0:9200"   # Default: 0.0.0.0:9200
+# data_dir = "/home/ttstack/ctl" # Default: /home/<user>/ctl
+
+# ── Agents ───────────────────────────────────────────────────────────
+# One [[agents]] section per physical host. Repeat as needed.
+#
+# Resource defaults (0 = auto-detect from hardware):
+#   cpu_total  = 0     → uses all cores
+#   mem_total  = 0     → uses all RAM (MB)
+#   disk_total = 200000 → 200 GB (MB)
+#
+# Storage defaults:
+#   storage    = "raw" → plain file copy (also: "zfs", "btrfs")
+#   image_dir  = "/home/<user>/images"
+#   runtime_dir = "/home/<user>/runtime"
+
+[[agents]]
+host = "10.0.0.2"              # REQUIRED — agent IP or hostname
+
+# SSH connection (optional, defaults shown)
+# ssh_user = "root"
+# ssh_port = 22
+
+# Agent listen address (optional)
+# listen = "0.0.0.0:9100"
+
+# Unique host identifier (optional, auto-generated UUID if omitted)
+# host_id = "node-02"
+
+# ── Resource allocation ──────────────────────────────────────────────
+# Set to 0 for auto-detect, or specify exact values.
+# cpu_total  = 0               # vCPU cores to offer for VMs (0=all)
+# mem_total  = 0               # MB of RAM to offer for VMs (0=all)
+# disk_total = 200000          # MB of disk to offer for VMs
+
+# ── Storage ──────────────────────────────────────────────────────────
+# storage = "raw"              # "raw", "zfs", or "btrfs"
+#
+# Where base images are stored:
+# image_dir = "/home/ttstack/images"
+#
+# Where runtime VM clones are created:
+# runtime_dir = "/home/ttstack/runtime"
+#
+# For ZFS: use dataset paths instead of filesystem paths:
+#   storage     = "zfs"
+#   image_dir   = "tank/ttstack/images"
+#   runtime_dir = "tank/ttstack/runtime"
+#
+# For Btrfs: use paths on a Btrfs mount:
+#   storage     = "btrfs"
+#   image_dir   = "/mnt/btrfs/ttstack/images"
+#   runtime_dir = "/mnt/btrfs/ttstack/runtime"
+#
+# Multiple disk paths — use comma-separated values for image_dir
+# if images are spread across multiple disks/mount-points:
+#   image_dir = "/data1/images,/data2/images"
+
+# ── Example: minimal agent (all defaults) ────────────────────────────
+
+# [[agents]]
+# host = "10.0.0.3"
+
+# ── Example: ZFS-backed high-spec node ───────────────────────────────
+
+[[agents]]
+host        = "10.0.0.3"
+host_id     = "zfs-node"
+storage     = "zfs"
+image_dir   = "tank/ttstack/images"
+runtime_dir = "tank/ttstack/runtime"
+cpu_total   = 32
+mem_total   = 65536
+disk_total  = 1000000
+
+# ── Example: Btrfs node with custom paths ────────────────────────────
+
+# [[agents]]
+# host        = "10.0.0.4"
+# storage     = "btrfs"
+# image_dir   = "/mnt/nvme/ttstack/images"
+# runtime_dir = "/mnt/nvme/ttstack/runtime"
+# cpu_total   = 16
+# mem_total   = 32768
+# disk_total  = 500000
+
+# ── Example: multi-disk raw node ─────────────────────────────────────
+
+# [[agents]]
+# host        = "10.0.0.5"
+# storage     = "raw"
+# image_dir   = "/data1/images,/data2/images"
+# runtime_dir = "/data1/runtime"
+# cpu_total   = 8
+# mem_total   = 16384
+# disk_total  = 400000
