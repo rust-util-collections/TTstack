@@ -31,12 +31,12 @@ pub struct Config {
     #[arg(long, default_value_t = 0)]
     pub cpu_total: u32,
 
-    /// Total memory available for VMs in MB (0 = auto-detect).
+    /// Total memory for VMs in MiB (0 = auto-detect).
     #[arg(long, default_value_t = 0)]
     pub mem_total: u32,
 
-    /// Total disk space available for VMs in MB.
-    #[arg(long, default_value_t = 200_000)]
+    /// Total disk for VMs in MiB (default: ~200 GiB).
+    #[arg(long, default_value_t = 200 * 1024)]
     pub disk_total: u32,
 
     /// Unique host identifier (auto-generated if not set).

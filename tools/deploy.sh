@@ -34,6 +34,17 @@ need_root() {
     [ "$(id -u)" -eq 0 ] || err "must be run as root (or via sudo)"
 }
 
+# Convert disk_total value: "200G" → 204800 (MiB), plain number passes through
+parse_disk() {
+    local val="$1"
+    val="${val%\"}" ; val="${val#\"}"
+    if [[ "$val" =~ ^([0-9]+)[gG]$ ]]; then
+        echo $(( ${BASH_REMATCH[1]} * 1024 ))
+    else
+        echo "$val"
+    fi
+}
+
 # ── Idempotent local setup ───────────────────────────────────────────
 
 ensure_user() {
@@ -103,7 +114,7 @@ local_deploy_agent() {
     local storage="${2:-raw}"
     local image_dir="${3:-$TTHOME/images}"
     local runtime_dir="${4:-$TTHOME/runtime}"
-    local cpu="${5:-0}" mem="${6:-0}" disk="${7:-200000}"
+    local cpu="${5:-0}" mem="${6:-0}" disk="$(parse_disk "${7:-200G}")"
     local host_id="${8:-}"
 
     log "deploying tt-agent (listen=$listen storage=$storage)"
@@ -271,7 +282,7 @@ distributed_deploy() {
             "${!_rd:-$home/runtime}" \
             "${!_cpu:-0}" \
             "${!_mem:-0}" \
-            "${!_dk:-200000}" \
+            "${!_dk:-200G}" \
             "${!_hid:-}"
 
         i=$((i + 1))

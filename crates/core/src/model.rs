@@ -127,13 +127,13 @@ pub enum HostState {
 pub struct Resource {
     pub cpu_total: u32,
     pub cpu_used: u32,
-    /// Total memory in MB.
+    /// Total memory in MiB.
     pub mem_total: u32,
-    /// Used memory in MB.
+    /// Used memory in MiB.
     pub mem_used: u32,
-    /// Total disk in MB.
+    /// Total disk in MiB.
     pub disk_total: u32,
-    /// Used disk in MB.
+    /// Used disk in MiB.
     pub disk_used: u32,
     /// Number of active VMs / containers.
     pub vm_count: u32,
@@ -185,9 +185,9 @@ pub struct Vm {
     pub engine: Engine,
     /// Number of vCPUs.
     pub cpu: u32,
-    /// Memory in MB.
+    /// Memory in MiB.
     pub mem: u32,
-    /// Disk in MB.
+    /// Disk in MiB.
     pub disk: u32,
     /// Internal IP (on the host bridge).
     pub ip: String,
@@ -213,9 +213,9 @@ pub struct Env {
 
 /// Default number of vCPUs per VM.
 pub const VM_CPU_DEFAULT: u32 = 2;
-/// Default memory per VM in MB.
+/// Default memory per VM in MiB (1 GiB).
 pub const VM_MEM_DEFAULT: u32 = 1024;
-/// Default disk per VM in MB (40 GB).
+/// Default disk per VM in MiB (40 GiB).
 pub const VM_DISK_DEFAULT: u32 = 40 * 1024;
 /// Maximum environment lifetime in seconds (6 hours).
 pub const MAX_LIFETIME: u64 = 6 * 3600;

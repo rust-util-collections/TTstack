@@ -5,37 +5,41 @@
 #
 # All fields have sensible defaults — only [controller].host and
 # [[agents]].host are required. Everything else can be omitted.
+#
+# Units:
+#   mem_total   — MiB  (e.g. 16384 = 16 GiB)
+#   disk_total  — MiB  (e.g. 204800 = 200 GiB), or use "200G" shorthand
 
 [general]
-prefix      = "/opt/ttstack"    # Install path on all hosts
-user        = "ttstack"         # Runtime user (created if absent)
+prefix      = "/opt/ttstack"     # Install path on all hosts
+user        = "ttstack"          # Runtime user (created if absent)
 release_dir = "./target/release" # Local path to compiled binaries
 
 # ── Controller ───────────────────────────────────────────────────────
 # One controller per fleet. Hosts the REST API and web dashboard.
 
 [controller]
-host     = "10.0.0.1"          # REQUIRED — controller IP or hostname
-# ssh_user = "root"            # Default: root
-# ssh_port = 22                # Default: 22
-# listen   = "0.0.0.0:9200"   # Default: 0.0.0.0:9200
+host     = "10.0.0.1"           # REQUIRED — controller IP or hostname
+# ssh_user = "root"             # Default: root
+# ssh_port = 22                 # Default: 22
+# listen   = "0.0.0.0:9200"    # Default: 0.0.0.0:9200
 # data_dir = "/home/ttstack/ctl" # Default: /home/<user>/ctl
 
 # ── Agents ───────────────────────────────────────────────────────────
 # One [[agents]] section per physical host. Repeat as needed.
 #
 # Resource defaults (0 = auto-detect from hardware):
-#   cpu_total  = 0     → uses all cores
-#   mem_total  = 0     → uses all RAM (MB)
-#   disk_total = 200000 → 200 GB (MB)
+#   cpu_total  = 0        → all cores
+#   mem_total  = 0        → all RAM    (unit: MiB)
+#   disk_total = "200G"   → 200 GiB   (unit: MiB, or string with G suffix)
 #
 # Storage defaults:
-#   storage    = "raw" → plain file copy (also: "zfs", "btrfs")
-#   image_dir  = "/home/<user>/images"
+#   storage     = "raw"   → plain file copy (also: "zfs", "btrfs")
+#   image_dir   = "/home/<user>/images"
 #   runtime_dir = "/home/<user>/runtime"
 
 [[agents]]
-host = "10.0.0.2"              # REQUIRED — agent IP or hostname
+host = "10.0.0.2"               # REQUIRED — agent IP or hostname
 
 # SSH connection (optional, defaults shown)
 # ssh_user = "root"
@@ -49,9 +53,11 @@ host = "10.0.0.2"              # REQUIRED — agent IP or hostname
 
 # ── Resource allocation ──────────────────────────────────────────────
 # Set to 0 for auto-detect, or specify exact values.
-# cpu_total  = 0               # vCPU cores to offer for VMs (0=all)
-# mem_total  = 0               # MB of RAM to offer for VMs (0=all)
-# disk_total = 200000          # MB of disk to offer for VMs
+#
+# cpu_total  = 0               # vCPU cores (0 = all available)
+# mem_total  = 0               # MiB of RAM (0 = all available)
+# disk_total = "200G"          # Disk quota — MiB or "NNNg"/"NNNG" shorthand
+#                              # Examples: 204800, "200G", "500G"
 
 # ── Storage ──────────────────────────────────────────────────────────
 # storage = "raw"              # "raw", "zfs", or "btrfs"
@@ -72,11 +78,10 @@ host = "10.0.0.2"              # REQUIRED — agent IP or hostname
 #   image_dir   = "/mnt/btrfs/ttstack/images"
 #   runtime_dir = "/mnt/btrfs/ttstack/runtime"
 #
-# Multiple disk paths — use comma-separated values for image_dir
-# if images are spread across multiple disks/mount-points:
+# Multiple disk paths — comma-separated for images spread across disks:
 #   image_dir = "/data1/images,/data2/images"
 
-# ── Example: minimal agent (all defaults) ────────────────────────────
+# ── Example: minimal agent (all auto-detected) ──────────────────────
 
 # [[agents]]
 # host = "10.0.0.3"
@@ -89,11 +94,11 @@ host_id     = "zfs-node"
 storage     = "zfs"
 image_dir   = "tank/ttstack/images"
 runtime_dir = "tank/ttstack/runtime"
-cpu_total   = 32
-mem_total   = 65536
-disk_total  = 1000000
+cpu_total   = 32               # 32 cores
+mem_total   = 65536            # 64 GiB
+disk_total  = "1000G"          # ~1 TiB
 
-# ── Example: Btrfs node with custom paths ────────────────────────────
+# ── Example: Btrfs node with NVMe storage ────────────────────────────
 
 # [[agents]]
 # host        = "10.0.0.4"
@@ -101,8 +106,8 @@ disk_total  = 1000000
 # image_dir   = "/mnt/nvme/ttstack/images"
 # runtime_dir = "/mnt/nvme/ttstack/runtime"
 # cpu_total   = 16
-# mem_total   = 32768
-# disk_total  = 500000
+# mem_total   = 32768          # 32 GiB
+# disk_total  = "500G"
 
 # ── Example: multi-disk raw node ─────────────────────────────────────
 
@@ -112,5 +117,5 @@ disk_total  = 1000000
 # image_dir   = "/data1/images,/data2/images"
 # runtime_dir = "/data1/runtime"
 # cpu_total   = 8
-# mem_total   = 16384
-# disk_total  = 400000
+# mem_total   = 16384          # 16 GiB
+# disk_total  = "400G"

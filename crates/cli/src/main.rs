@@ -76,10 +76,10 @@ enum EnvCmd {
         /// CPU cores per VM.
         #[arg(long)]
         cpu: Option<u32>,
-        /// Memory per VM in MB.
+        /// Memory per VM in MiB.
         #[arg(long)]
         mem: Option<u32>,
-        /// Disk per VM in MB.
+        /// Disk per VM in MiB.
         #[arg(long)]
         disk: Option<u32>,
         /// Duplicate each image N times.
