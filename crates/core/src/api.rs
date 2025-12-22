@@ -2,7 +2,6 @@
 
 use crate::model::*;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 
 // ── Agent API (controller → agent) ─────────────────────────────────
 
@@ -72,6 +71,9 @@ pub struct CreateEnvReq {
 pub struct EnvDetail {
     pub env: Env,
     pub vms: Vec<Vm>,
+    /// Non-fatal warnings (e.g. VMs that failed to create).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 /// Host registration request from CLI or auto-discovery.
@@ -146,32 +148,6 @@ impl ApiRespEmpty {
     }
 }
 
-/// Vm summary for display (subset of full Vm).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VmSummary {
-    pub id: String,
-    pub image: String,
-    pub engine: Engine,
-    pub state: VmState,
-    pub ip: String,
-    pub port_map: BTreeMap<u16, u16>,
-    pub host_id: String,
-}
-
-impl From<&Vm> for VmSummary {
-    fn from(vm: &Vm) -> Self {
-        Self {
-            id: vm.id.clone(),
-            image: vm.image.clone(),
-            engine: vm.engine,
-            state: vm.state,
-            ip: vm.ip.clone(),
-            port_map: vm.port_map.clone(),
-            host_id: vm.host_id.clone(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -231,25 +207,4 @@ mod tests {
         assert!(!spec.deny_outgoing);
     }
 
-    #[test]
-    fn vm_summary_from_vm() {
-        let vm = Vm {
-            id: "vm1".into(),
-            env_id: "env1".into(),
-            host_id: "h1".into(),
-            image: "ubuntu".into(),
-            engine: Engine::Qemu,
-            cpu: 2,
-            mem: 1024,
-            disk: 40960,
-            ip: "10.10.0.1".into(),
-            port_map: BTreeMap::new(),
-            state: VmState::Running,
-            created_at: 0,
-        };
-        let summary = VmSummary::from(&vm);
-        assert_eq!(summary.id, "vm1");
-        assert_eq!(summary.host_id, "h1");
-        assert_eq!(summary.engine, Engine::Qemu);
-    }
 }

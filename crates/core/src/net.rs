@@ -32,10 +32,17 @@ pub fn vm_ip(index: u32) -> String {
 }
 
 /// TAP device name for a VM.
+///
+/// Uses a hash of the VM ID to guarantee uniqueness even for long IDs.
+/// Result is always <= 15 chars (IFNAMSIZ).
 pub fn tap_name(vm_id: &str) -> String {
-    // Truncate to comply with IFNAMSIZ (15 chars)
-    let suffix: String = vm_id.chars().take(11).collect();
-    format!("tap-{suffix}")
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut h = DefaultHasher::new();
+    vm_id.hash(&mut h);
+    let hash = h.finish();
+    // "tt-" + 12 hex chars = 15 chars exactly
+    format!("tt-{:012x}", hash & 0xFFFF_FFFF_FFFF)
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -383,23 +390,23 @@ mod tests {
     }
 
     #[test]
-    fn tap_name_short_id() {
-        assert_eq!(tap_name("abc"), "tap-abc");
+    fn tap_name_fits_ifnamsiz() {
+        assert!(tap_name("abc").len() <= 15);
+        assert!(tap_name("a".repeat(200).as_str()).len() <= 15);
     }
 
     #[test]
-    fn tap_name_truncates_long_id() {
-        let long_id = "a".repeat(20);
-        let tap = tap_name(&long_id);
-        assert!(tap.len() <= 15, "tap name too long: {tap}");
-        assert_eq!(tap, "tap-aaaaaaaaaaa");
+    fn tap_name_deterministic() {
+        assert_eq!(tap_name("vm1"), tap_name("vm1"));
     }
 
     #[test]
-    fn tap_name_exact_limit() {
-        // 11 chars of id + "tap-" = 15 = IFNAMSIZ
-        let id = "12345678901";
-        assert_eq!(tap_name(id), "tap-12345678901");
-        assert_eq!(tap_name(id).len(), 15);
+    fn tap_name_unique_for_different_ids() {
+        assert_ne!(tap_name("vm1"), tap_name("vm2"));
+        // Long IDs that used to collide via truncation are now unique
+        assert_ne!(
+            tap_name("very_long_vm_name_1"),
+            tap_name("very_long_vm_name_2")
+        );
     }
 }

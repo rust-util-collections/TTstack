@@ -277,6 +277,9 @@ async fn cmd_env(c: &Client, action: EnvCmd) -> Result<()> {
                     vm.id, vm.engine, vm.image, vm.ip, vm.port_map
                 );
             }
+            for w in &detail.warnings {
+                eprintln!("  warning: {w}");
+            }
         }
         EnvCmd::List => {
             let envs: Vec<Env> = c.get("/api/envs").await?;

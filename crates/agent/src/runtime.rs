@@ -80,6 +80,16 @@ impl Runtime {
         net::setup_bridge().c(d!("bridge setup"))?;
         net::setup_nat().c(d!("NAT setup"))?;
 
+        // Restore network rules for persisted VMs
+        for vm in &vms {
+            if vm.state == VmState::Running {
+                let _ = net::create_tap(&vm.id, &vm.ip);
+                for (&guest, &host) in &vm.port_map {
+                    let _ = net::add_port_forward(host, &vm.ip, guest);
+                }
+            }
+        }
+
         Ok(Self {
             host_id,
             db,
@@ -95,6 +105,10 @@ impl Runtime {
 
     /// Create a new VM.
     pub fn create_vm(&mut self, req: &CreateVmReq) -> Result<Vm> {
+        // Input validation
+        validate_name(&req.vm_id, "vm_id").map_err(|e| eg!(e))?;
+        validate_name(&req.image, "image").map_err(|e| eg!(e))?;
+
         if !self.resource.can_fit(req.cpu, req.mem, req.disk) {
             return Err(eg!("insufficient resources on host {}", self.host_id));
         }
@@ -117,12 +131,15 @@ impl Runtime {
         // Create TAP device
         net::create_tap(&req.vm_id, &ip).c(d!("TAP setup"))?;
 
-        // Allocate port mappings
+        // Allocate port mappings (use checked arithmetic to avoid u16 overflow)
         let mut port_map = BTreeMap::new();
-        let base_port = 20000 + (ip_idx * 100) as u16;
+        let base_port = 20000u32.saturating_add(ip_idx.saturating_mul(100));
         for (i, &guest_port) in req.ports.iter().enumerate() {
-            let host_port = base_port + i as u16;
-            port_map.insert(guest_port, host_port);
+            let host_port = base_port.saturating_add(i as u32);
+            if host_port > 65535 {
+                break; // silently skip ports that can't be allocated
+            }
+            port_map.insert(guest_port, host_port as u16);
         }
 
         let mut vm = Vm {

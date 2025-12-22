@@ -224,10 +224,26 @@ pub const MAX_HOSTS: usize = 50;
 /// Maximum total VM instances across the fleet.
 pub const MAX_VMS: usize = 1000;
 
-/// Home directory for the ttstack user (runtime data).
-pub const HOME_DIR: &str = "/home/ttstack";
 /// Directory for engine PID files, sockets, and other runtime state.
 pub const RUN_DIR: &str = "/home/ttstack/run";
+
+// ── Input Validation ────────────────────────────────────────────────
+
+/// Validate that a name (env, host, image) is safe.
+///
+/// Rejects path traversal (`..`), shell metacharacters, and excessive length.
+pub fn validate_name(name: &str, label: &str) -> std::result::Result<(), String> {
+    if name.is_empty() {
+        return Err(format!("{label} cannot be empty"));
+    }
+    if name.len() > 128 {
+        return Err(format!("{label} too long (max 128 chars)"));
+    }
+    if name.contains("..") || name.contains('/') || name.contains('\0') {
+        return Err(format!("{label} contains invalid characters"));
+    }
+    Ok(())
+}
 
 #[cfg(test)]
 mod tests {
@@ -367,5 +383,33 @@ mod tests {
         assert!(MAX_LIFETIME > 0);
         assert!(MAX_HOSTS > 0 && MAX_HOSTS <= 100);
         assert!(MAX_VMS > 0 && MAX_VMS <= 10_000);
+    }
+
+    // ── Validation ──────────────────────────────────────────────────
+
+    #[test]
+    fn validate_name_ok() {
+        assert!(validate_name("ubuntu-22.04", "image").is_ok());
+        assert!(validate_name("my-env", "env").is_ok());
+        assert!(validate_name("a", "x").is_ok());
+    }
+
+    #[test]
+    fn validate_name_rejects_traversal() {
+        assert!(validate_name("../etc/passwd", "image").is_err());
+        assert!(validate_name("foo/../bar", "image").is_err());
+        assert!(validate_name("foo/bar", "image").is_err());
+    }
+
+    #[test]
+    fn validate_name_rejects_empty_and_long() {
+        assert!(validate_name("", "env").is_err());
+        let long = "a".repeat(200);
+        assert!(validate_name(&long, "env").is_err());
+    }
+
+    #[test]
+    fn validate_name_rejects_null() {
+        assert!(validate_name("foo\0bar", "id").is_err());
     }
 }

@@ -160,6 +160,16 @@ pub async fn create_env(
     State(db): State<CtlState>,
     Json(req): Json<CreateEnvReq>,
 ) -> impl IntoResponse {
+    // Input validation
+    if let Err(e) = validate_name(&req.id, "env name") {
+        return (StatusCode::BAD_REQUEST, Json(ApiResp::<EnvDetail>::err(e)));
+    }
+    for spec in &req.vms {
+        if let Err(e) = validate_name(&spec.image, "image") {
+            return (StatusCode::BAD_REQUEST, Json(ApiResp::<EnvDetail>::err(e)));
+        }
+    }
+
     // Validate & schedule under lock
     let hosts = {
         let db = db.lock().unwrap();
@@ -204,6 +214,7 @@ pub async fn create_env(
     let client = agent_client();
     let mut vm_ids = Vec::new();
     let mut created_vms = Vec::new();
+    let mut warnings = Vec::new();
 
     // Create VMs on agents (no lock held during HTTP calls)
     for (spec, placement) in &placements {
@@ -228,30 +239,40 @@ pub async fn create_env(
         match client.post(&url).json(&agent_req).send().await {
             Ok(r) if r.status().is_success() => {
                 if let Ok(body) = r.json::<ApiResp<CreateVmResp>>().await
-                    && let Some(data) = body.data {
-                        vm_ids.push(vm_id);
-                        created_vms.push(data.vm);
-                        continue;
-                    }
-                eprintln!(
-                    "warning: unparseable agent response for VM on {}",
+                    && let Some(data) = body.data
+                {
+                    vm_ids.push(vm_id);
+                    created_vms.push(data.vm);
+                    continue;
+                }
+                warnings.push(format!(
+                    "unparseable response from {}",
                     placement.host_addr
-                );
+                ));
             }
             Ok(r) => {
-                eprintln!(
-                    "warning: agent returned {} for VM on {}",
-                    r.status(),
-                    placement.host_addr
-                );
+                warnings.push(format!(
+                    "agent {} returned {}",
+                    placement.host_addr,
+                    r.status()
+                ));
             }
             Err(e) => {
-                eprintln!(
-                    "warning: failed to create VM on {}: {e}",
+                warnings.push(format!(
+                    "failed to reach {}: {e}",
                     placement.host_addr
-                );
+                ));
             }
         }
+    }
+
+    if created_vms.is_empty() && !req.vms.is_empty() {
+        return (
+            StatusCode::BAD_GATEWAY,
+            Json(ApiResp::<EnvDetail>::err(
+                "all VM creation attempts failed; check agent connectivity",
+            )),
+        );
     }
 
     let env = Env {
@@ -263,15 +284,12 @@ pub async fn create_env(
         state: EnvState::Active,
     };
 
-    // Persist under lock
     {
         let db = db.lock().unwrap();
         let _ = db.put_env(&env);
         for vm in &created_vms {
             let _ = db.put_vm(vm);
         }
-        // Refresh host resources
-        drop(db);
     }
 
     refresh_all_hosts(&db, &client).await;
@@ -279,6 +297,7 @@ pub async fn create_env(
     let detail = EnvDetail {
         env,
         vms: created_vms,
+        warnings,
     };
 
     (StatusCode::CREATED, Json(ApiResp::success(detail)))
@@ -304,7 +323,7 @@ pub async fn get_env(
             let vms = db.vms_by_env(&id).unwrap_or_default();
             (
                 StatusCode::OK,
-                Json(ApiResp::success(EnvDetail { env, vms })),
+                Json(ApiResp::success(EnvDetail { env, vms, warnings: vec![] })),
             )
         }
         Ok(None) => (

@@ -80,8 +80,16 @@ async fn main() {
     eprintln!("tt-ctl listening on {}", cfg.listen);
 
     axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
         .await
         .unwrap_or_else(|e| eprintln!("Server error: {e}"));
+
+    eprintln!("tt-ctl shutting down");
+}
+
+async fn shutdown_signal() {
+    let _ = tokio::signal::ctrl_c().await;
+    eprintln!("received shutdown signal");
 }
 
 /// Periodically destroy expired environments.
