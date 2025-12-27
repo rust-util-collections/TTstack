@@ -55,10 +55,7 @@ pub fn place_vm(hosts: &[Host], spec: &VmSpec) -> Result<Placement> {
 /// Schedule an entire environment's VMs across the fleet.
 ///
 /// Returns a list of (VmSpec, Placement) pairs.
-pub fn schedule_env(
-    hosts: &[Host],
-    specs: &[VmSpec],
-) -> Result<Vec<(VmSpec, Placement)>> {
+pub fn schedule_env(hosts: &[Host], specs: &[VmSpec]) -> Result<Vec<(VmSpec, Placement)>> {
     let mut result = Vec::with_capacity(specs.len());
 
     // Work with a mutable copy of host resources for multi-VM scheduling

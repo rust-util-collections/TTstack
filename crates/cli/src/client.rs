@@ -1,8 +1,8 @@
 //! HTTP client for communicating with the tt-ctl controller.
 
 use ruc::*;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use ttcore::api::ApiResp;
 
 /// Controller API client.
@@ -43,11 +43,7 @@ impl Client {
     }
 
     /// POST request with JSON body, returning deserialized data.
-    pub async fn post<B: Serialize, T: DeserializeOwned>(
-        &self,
-        path: &str,
-        body: &B,
-    ) -> Result<T> {
+    pub async fn post<B: Serialize, T: DeserializeOwned>(&self, path: &str, body: &B) -> Result<T> {
         let url = format!("{}{path}", self.base_url);
         let resp = self
             .http
@@ -83,7 +79,12 @@ impl Client {
     /// DELETE request.
     pub async fn delete(&self, path: &str) -> Result<()> {
         let url = format!("{}{path}", self.base_url);
-        let resp = self.http.delete(&url).send().await.c(d!("request failed"))?;
+        let resp = self
+            .http
+            .delete(&url)
+            .send()
+            .await
+            .c(d!("request failed"))?;
         let status = resp.status();
         let body: ApiResp<()> = resp.json().await.c(d!("invalid response"))?;
 
@@ -102,7 +103,9 @@ const CONFIG_FILE: &str = ".ttconfig";
 /// Read the controller address from ~/.ttconfig.
 pub fn load_config() -> Option<String> {
     let path = dirs_path();
-    std::fs::read_to_string(&path).ok().map(|s| s.trim().to_string())
+    std::fs::read_to_string(&path)
+        .ok()
+        .map(|s| s.trim().to_string())
 }
 
 /// Save the controller address to ~/.ttconfig.

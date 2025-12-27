@@ -359,10 +359,10 @@ mod tests {
             vm_count: 2,
         };
         assert!(r.can_fit(4, 8192, 100_000)); // exact fit
-        assert!(r.can_fit(1, 1, 1));           // plenty of room
-        assert!(!r.can_fit(5, 1, 1));          // cpu insufficient
-        assert!(!r.can_fit(1, 9000, 1));       // mem insufficient
-        assert!(!r.can_fit(1, 1, 200_000));    // disk insufficient
+        assert!(r.can_fit(1, 1, 1)); // plenty of room
+        assert!(!r.can_fit(5, 1, 1)); // cpu insufficient
+        assert!(!r.can_fit(1, 9000, 1)); // mem insufficient
+        assert!(!r.can_fit(1, 1, 200_000)); // disk insufficient
     }
 
     #[test]

@@ -129,13 +129,10 @@ async fn main() {
         return;
     }
 
-    let addr = cli
-        .server
-        .or_else(client::load_config)
-        .unwrap_or_else(|| {
-            eprintln!("No controller address. Run: tt config <addr>");
-            std::process::exit(1);
-        });
+    let addr = cli.server.or_else(client::load_config).unwrap_or_else(|| {
+        eprintln!("No controller address. Run: tt config <addr>");
+        std::process::exit(1);
+    });
 
     let c = Client::new(&addr);
 
@@ -210,9 +207,18 @@ async fn cmd_host(c: &Client, action: HostCmd) -> Result<()> {
             println!("  State:    {:?}", h.state);
             println!("  Engines:  {:?}", h.engines);
             println!("  Storage:  {}", h.storage);
-            println!("  CPU:      {}/{}", h.resource.cpu_used, h.resource.cpu_total);
-            println!("  Memory:   {}/{} MB", h.resource.mem_used, h.resource.mem_total);
-            println!("  Disk:     {}/{} MB", h.resource.disk_used, h.resource.disk_total);
+            println!(
+                "  CPU:      {}/{}",
+                h.resource.cpu_used, h.resource.cpu_total
+            );
+            println!(
+                "  Memory:   {}/{} MB",
+                h.resource.mem_used, h.resource.mem_total
+            );
+            println!(
+                "  Disk:     {}/{} MB",
+                h.resource.disk_used, h.resource.disk_total
+            );
             println!("  VMs:      {}", h.resource.vm_count);
         }
         HostCmd::Remove { id } => {
@@ -287,10 +293,7 @@ async fn cmd_env(c: &Client, action: EnvCmd) -> Result<()> {
                 println!("No environments.");
                 return Ok(());
             }
-            println!(
-                "{:<16} {:<12} {:<8} {:>4}",
-                "NAME", "OWNER", "STATE", "VMs"
-            );
+            println!("{:<16} {:<12} {:<8} {:>4}", "NAME", "OWNER", "STATE", "VMs");
             for e in envs {
                 println!(
                     "{:<16} {:<12} {:<8} {:>4}",

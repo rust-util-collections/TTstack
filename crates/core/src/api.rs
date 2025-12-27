@@ -108,7 +108,10 @@ pub struct FleetStatus {
 
 /// Standard API response envelope.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound(serialize = "T: Serialize", deserialize = "T: serde::de::DeserializeOwned"))]
+#[serde(bound(
+    serialize = "T: Serialize",
+    deserialize = "T: serde::de::DeserializeOwned"
+))]
 pub struct ApiResp<T> {
     pub ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -206,5 +209,4 @@ mod tests {
         assert!(spec.ports.is_empty());
         assert!(!spec.deny_outgoing);
     }
-
 }

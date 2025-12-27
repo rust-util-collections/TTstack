@@ -75,11 +75,7 @@ fn read_total_mem_mb() -> Option<u32> {
     let content = std::fs::read_to_string("/proc/meminfo").ok()?;
     for line in content.lines() {
         if line.starts_with("MemTotal:") {
-            let kb: u64 = line
-                .split_whitespace()
-                .nth(1)?
-                .parse()
-                .ok()?;
+            let kb: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
             return Some((kb / 1024) as u32);
         }
     }

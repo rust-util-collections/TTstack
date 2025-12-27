@@ -4,7 +4,7 @@
 //! Communicates with the Firecracker process via its REST API socket.
 
 use super::VmEngine;
-use crate::model::{Vm, VmState, RUN_DIR};
+use crate::model::{RUN_DIR, Vm, VmState};
 use ruc::*;
 use std::path::Path;
 use std::process::Command;
@@ -83,8 +83,7 @@ impl VmEngine for FirecrackerEngine {
             .spawn()
             .c(d!("spawn firecracker"))?;
 
-        std::fs::write(Self::pid_path(vm), child.id().to_string())
-            .c(d!("write pid"))
+        std::fs::write(Self::pid_path(vm), child.id().to_string()).c(d!("write pid"))
     }
 
     fn start(&self, vm: &Vm) -> Result<()> {

@@ -5,7 +5,7 @@ CARGO_FLAG ?=
 .PHONY: all build release test lint fmt fmt-check doc clean \
         install uninstall deploy-agent deploy-ctl deploy deploy-dist help
 
-all: build
+all: fmt lint build test
 
 ## Build debug binaries
 build:

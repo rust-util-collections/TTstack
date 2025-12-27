@@ -7,8 +7,8 @@ mod config;
 mod handler;
 mod runtime;
 
-use axum::routing::{get, post};
 use axum::Router;
+use axum::routing::{get, post};
 use clap::Parser;
 use config::Config;
 use handler::AppState;

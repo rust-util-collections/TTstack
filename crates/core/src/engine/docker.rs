@@ -76,7 +76,10 @@ impl VmEngine for DockerEngine {
             .output()
             .c(d!())?;
 
-        alt!(output.status.success(), return Err(eg!("container start failed")));
+        alt!(
+            output.status.success(),
+            return Err(eg!("container start failed"))
+        );
         Ok(())
     }
 
@@ -87,7 +90,10 @@ impl VmEngine for DockerEngine {
             .output()
             .c(d!())?;
 
-        alt!(output.status.success(), return Err(eg!("container stop failed")));
+        alt!(
+            output.status.success(),
+            return Err(eg!("container stop failed"))
+        );
         Ok(())
     }
 
@@ -99,7 +105,10 @@ impl VmEngine for DockerEngine {
             .output()
             .c(d!())?;
 
-        alt!(output.status.success(), return Err(eg!("container remove failed")));
+        alt!(
+            output.status.success(),
+            return Err(eg!("container remove failed"))
+        );
         Ok(())
     }
 

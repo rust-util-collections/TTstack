@@ -4,7 +4,7 @@
 //! compiled on FreeBSD targets via `#[cfg(target_os = "freebsd")]`.
 
 use super::VmEngine;
-use crate::model::{Vm, VmState, RUN_DIR};
+use crate::model::{RUN_DIR, Vm, VmState};
 use ruc::*;
 use std::process::Command;
 

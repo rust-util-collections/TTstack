@@ -286,7 +286,7 @@ fn init_db(db: &Connection) -> Result<()> {
          CREATE TABLE IF NOT EXISTS _meta (
              key   TEXT PRIMARY KEY,
              value TEXT NOT NULL
-         );"
+         );",
     )
     .c(d!("init meta table"))?;
 
@@ -295,7 +295,8 @@ fn init_db(db: &Connection) -> Result<()> {
     if current > SCHEMA_VERSION {
         return Err(eg!(
             "agent DB schema v{} is newer than this binary (v{}); upgrade TTstack first",
-            current, SCHEMA_VERSION
+            current,
+            SCHEMA_VERSION
         ));
     }
 
@@ -304,7 +305,7 @@ fn init_db(db: &Connection) -> Result<()> {
             "CREATE TABLE IF NOT EXISTS vms (
                 id       TEXT PRIMARY KEY,
                 data     TEXT NOT NULL
-            );"
+            );",
         )
         .c(d!("migration v1"))?;
     }
@@ -327,7 +328,8 @@ fn get_schema_version(db: &Connection) -> Result<u32> {
     match rows.next().c(d!())? {
         Some(row) => {
             let val: String = row.get(0).c(d!())?;
-            val.parse::<u32>().map_err(|_| eg!("invalid schema_version: {val}"))
+            val.parse::<u32>()
+                .map_err(|_| eg!("invalid schema_version: {val}"))
         }
         None => Ok(0),
     }
@@ -356,9 +358,7 @@ fn load_vm(db: &Connection, id: &str) -> Result<Option<Vm>> {
     let mut stmt = db
         .prepare("SELECT data FROM vms WHERE id = ?1")
         .c(d!("prepare load VM"))?;
-    let mut rows = stmt
-        .query(rusqlite::params![id])
-        .c(d!("query VM"))?;
+    let mut rows = stmt.query(rusqlite::params![id]).c(d!("query VM"))?;
     match rows.next().c(d!("next row"))? {
         Some(row) => {
             let data: String = row.get(0).c(d!("get data"))?;

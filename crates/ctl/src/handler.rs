@@ -4,10 +4,10 @@
 
 use crate::db::Db;
 use crate::scheduler;
+use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::Json;
 use std::sync::{Arc, Mutex};
 use ttcore::api::*;
 use ttcore::model::*;
@@ -107,10 +107,7 @@ pub async fn list_hosts(State(db): State<CtlState>) -> impl IntoResponse {
 }
 
 /// GET /api/hosts/:id
-pub async fn get_host(
-    State(db): State<CtlState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+pub async fn get_host(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
     let db = db.lock().unwrap();
     match db.get_host(&id) {
         Ok(Some(h)) => (StatusCode::OK, Json(ApiResp::success(h))),
@@ -126,10 +123,7 @@ pub async fn get_host(
 }
 
 /// DELETE /api/hosts/:id
-pub async fn remove_host(
-    State(db): State<CtlState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+pub async fn remove_host(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
     let db = db.lock().unwrap();
 
     let vms = db.vms_by_host(&id).unwrap_or_default();
@@ -245,10 +239,7 @@ pub async fn create_env(
                     created_vms.push(data.vm);
                     continue;
                 }
-                warnings.push(format!(
-                    "unparseable response from {}",
-                    placement.host_addr
-                ));
+                warnings.push(format!("unparseable response from {}", placement.host_addr));
             }
             Ok(r) => {
                 warnings.push(format!(
@@ -258,10 +249,7 @@ pub async fn create_env(
                 ));
             }
             Err(e) => {
-                warnings.push(format!(
-                    "failed to reach {}: {e}",
-                    placement.host_addr
-                ));
+                warnings.push(format!("failed to reach {}: {e}", placement.host_addr));
             }
         }
     }
@@ -313,17 +301,18 @@ pub async fn list_envs(State(db): State<CtlState>) -> impl IntoResponse {
 }
 
 /// GET /api/envs/:id
-pub async fn get_env(
-    State(db): State<CtlState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+pub async fn get_env(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
     let db = db.lock().unwrap();
     match db.get_env(&id) {
         Ok(Some(env)) => {
             let vms = db.vms_by_env(&id).unwrap_or_default();
             (
                 StatusCode::OK,
-                Json(ApiResp::success(EnvDetail { env, vms, warnings: vec![] })),
+                Json(ApiResp::success(EnvDetail {
+                    env,
+                    vms,
+                    warnings: vec![],
+                })),
             )
         }
         Ok(None) => (
@@ -340,10 +329,7 @@ pub async fn get_env(
 }
 
 /// DELETE /api/envs/:id
-pub async fn delete_env(
-    State(db): State<CtlState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+pub async fn delete_env(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
     let (vms, hosts) = {
         let db = db.lock().unwrap();
         match db.get_env(&id) {
@@ -386,10 +372,7 @@ pub async fn delete_env(
 }
 
 /// POST /api/envs/:id/stop
-pub async fn stop_env(
-    State(db): State<CtlState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+pub async fn stop_env(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
     let (mut env, vms, hosts) = {
         let db = db.lock().unwrap();
         let env = match db.get_env(&id) {
@@ -422,10 +405,7 @@ pub async fn stop_env(
 }
 
 /// POST /api/envs/:id/start
-pub async fn start_env(
-    State(db): State<CtlState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+pub async fn start_env(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
     let (mut env, vms, hosts) = {
         let db = db.lock().unwrap();
         let env = match db.get_env(&id) {
@@ -476,14 +456,15 @@ pub async fn list_images(State(db): State<CtlState>) -> impl IntoResponse {
         let url = format!("http://{}/api/images", host.addr);
         if let Ok(resp) = client.get(&url).send().await
             && let Ok(body) = resp.json::<ApiResp<Vec<String>>>().await
-                && let Some(names) = body.data {
-                    for name in names {
-                        images.push(ImageInfo {
-                            name,
-                            host_id: host.id.clone(),
-                        });
-                    }
-                }
+            && let Some(names) = body.data
+        {
+            for name in names {
+                images.push(ImageInfo {
+                    name,
+                    host_id: host.id.clone(),
+                });
+            }
+        }
     }
 
     Json(ApiResp::success(images))
@@ -506,10 +487,7 @@ pub async fn fleet_status(State(db): State<CtlState>) -> impl IntoResponse {
 // ── VM Lookup ───────────────────────────────────────────────────────
 
 /// GET /api/vms/:id — get a single VM by ID (across all hosts).
-pub async fn get_vm(
-    State(db): State<CtlState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+pub async fn get_vm(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
     let db = db.lock().unwrap();
     match db.get_vm(&id) {
         Ok(Some(vm)) => (StatusCode::OK, Json(ApiResp::success(vm))),
@@ -547,10 +525,11 @@ async fn refresh_all_hosts(state: &CtlState, client: &reqwest::Client) {
         match client.get(&url).send().await {
             Ok(resp) => {
                 if let Ok(body) = resp.json::<ApiResp<AgentInfo>>().await
-                    && let Some(info) = body.data {
-                        updated.resource = info.resource;
-                        updated.state = HostState::Online;
-                    }
+                    && let Some(info) = body.data
+                {
+                    updated.resource = info.resource;
+                    updated.state = HostState::Online;
+                }
             }
             Err(_) => {
                 updated.state = HostState::Offline;

@@ -9,8 +9,8 @@ mod handler;
 mod scheduler;
 mod web;
 
-use axum::routing::{get, post};
 use axum::Router;
+use axum::routing::{get, post};
 use clap::Parser;
 use config::Config;
 use db::Db;

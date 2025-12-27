@@ -63,8 +63,7 @@ mod platform {
         run(&["ip", "link", "set", BRIDGE_NAME, "up"])?;
 
         // Enable IP forwarding
-        std::fs::write("/proc/sys/net/ipv4/ip_forward", "1")
-            .c(d!("enable ip_forward"))?;
+        std::fs::write("/proc/sys/net/ipv4/ip_forward", "1").c(d!("enable ip_forward"))?;
 
         Ok(())
     }
@@ -111,11 +110,7 @@ mod platform {
         Ok(())
     }
 
-    pub fn add_port_forward(
-        host_port: u16,
-        vm_ip_addr: &str,
-        guest_port: u16,
-    ) -> Result<()> {
+    pub fn add_port_forward(host_port: u16, vm_ip_addr: &str, guest_port: u16) -> Result<()> {
         nft(&format!(
             "add rule ip {NFT_TABLE} prerouting tcp dport {host_port} dnat to {vm_ip_addr}:{guest_port}"
         ))
@@ -138,11 +133,11 @@ mod platform {
                     .rsplit("handle ")
                     .next()
                     .and_then(|h| h.trim().parse::<u64>().ok())
-                {
-                    let _ = nft(&format!(
-                        "delete rule ip {NFT_TABLE} prerouting handle {handle}"
-                    ));
-                }
+            {
+                let _ = nft(&format!(
+                    "delete rule ip {NFT_TABLE} prerouting handle {handle}"
+                ));
+            }
         }
 
         Ok(())
@@ -224,10 +219,7 @@ mod platform {
     }
 
     pub fn bridge_exists() -> Result<bool> {
-        let output = Command::new("ifconfig")
-            .arg(BRIDGE_NAME)
-            .output()
-            .c(d!())?;
+        let output = Command::new("ifconfig").arg(BRIDGE_NAME).output().c(d!())?;
         Ok(output.status.success())
     }
 
@@ -254,11 +246,7 @@ mod platform {
         Ok(())
     }
 
-    pub fn add_port_forward(
-        host_port: u16,
-        vm_ip_addr: &str,
-        guest_port: u16,
-    ) -> Result<()> {
+    pub fn add_port_forward(host_port: u16, vm_ip_addr: &str, guest_port: u16) -> Result<()> {
         // Add a PF rdr rule via pfctl
         let rule = format!(
             "rdr pass on egress proto tcp from any to any port {host_port} -> {vm_ip_addr} port {guest_port}"
@@ -282,11 +270,12 @@ mod platform {
     }
 
     pub fn deny_outgoing(vm_ip_addr: &str) -> Result<()> {
-        let rule = format!(
-            "block out quick on egress from {vm_ip_addr} to any"
-        );
+        let rule = format!("block out quick on egress from {vm_ip_addr} to any");
         let output = Command::new("sh")
-            .args(["-c", &format!(r#"echo '{rule}' | pfctl -a ttstack/deny -f -"#)])
+            .args([
+                "-c",
+                &format!(r#"echo '{rule}' | pfctl -a ttstack/deny -f -"#),
+            ])
             .output()
             .c(d!("pfctl deny"))?;
 

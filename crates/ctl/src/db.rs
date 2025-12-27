@@ -86,9 +86,7 @@ impl Db {
         Self::set_schema_version(conn, SCHEMA_VERSION)?;
 
         if current < SCHEMA_VERSION {
-            eprintln!(
-                "database migrated: v{current} → v{SCHEMA_VERSION}"
-            );
+            eprintln!("database migrated: v{current} → v{SCHEMA_VERSION}");
         }
 
         Ok(())

@@ -4,7 +4,7 @@
 //! Each VM gets its own tap device connected to the host bridge.
 
 use super::VmEngine;
-use crate::model::{Vm, VmState, RUN_DIR};
+use crate::model::{RUN_DIR, Vm, VmState};
 use ruc::*;
 use std::path::Path;
 use std::process::Command;
@@ -34,10 +34,7 @@ impl QemuEngine {
             ])
             .args([
                 "-netdev",
-                &format!(
-                    "tap,id=net0,ifname=tap-{},script=no,downscript=no",
-                    vm.id
-                ),
+                &format!("tap,id=net0,ifname=tap-{},script=no,downscript=no", vm.id),
             ])
             .args(["-device", "virtio-net-pci,netdev=net0"])
             .args(["-pidfile", &self.pid_path(vm)])
@@ -138,12 +135,13 @@ impl VmEngine for QemuEngine {
 
     fn destroy(&self, vm: &Vm) -> Result<()> {
         if let Ok(pid) = self.read_pid(vm)
-            && Self::process_alive(pid) {
-                let _ = nix::sys::signal::kill(
-                    nix::unistd::Pid::from_raw(pid as i32),
-                    nix::sys::signal::Signal::SIGKILL,
-                );
-            }
+            && Self::process_alive(pid)
+        {
+            let _ = nix::sys::signal::kill(
+                nix::unistd::Pid::from_raw(pid as i32),
+                nix::sys::signal::Signal::SIGKILL,
+            );
+        }
 
         let _ = std::fs::remove_file(self.pid_path(vm));
         let _ = std::fs::remove_file(self.monitor_path(vm));

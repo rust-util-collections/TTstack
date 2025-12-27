@@ -1,10 +1,10 @@
 //! HTTP API handlers for the host agent.
 
 use crate::runtime::Runtime;
+use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::Json;
 use std::sync::{Arc, Mutex};
 use ttcore::api::*;
 use ttcore::model::Vm;
@@ -31,7 +31,10 @@ pub async fn create_vm(
 ) -> impl IntoResponse {
     let mut rt = rt.lock().unwrap();
     match rt.create_vm(&req) {
-        Ok(vm) => (StatusCode::CREATED, Json(ApiResp::success(CreateVmResp { vm }))),
+        Ok(vm) => (
+            StatusCode::CREATED,
+            Json(ApiResp::success(CreateVmResp { vm })),
+        ),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResp::<CreateVmResp>::err(e.to_string())),
@@ -46,10 +49,7 @@ pub async fn list_vms(State(rt): State<AppState>) -> impl IntoResponse {
 }
 
 /// GET /api/vms/:id — get a specific VM.
-pub async fn get_vm(
-    State(rt): State<AppState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+pub async fn get_vm(State(rt): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
     let rt = rt.lock().unwrap();
     match rt.get_vm(&id) {
         Some(vm) => (StatusCode::OK, Json(ApiResp::success(vm))),
@@ -61,10 +61,7 @@ pub async fn get_vm(
 }
 
 /// DELETE /api/vms/:id — destroy a VM.
-pub async fn destroy_vm(
-    State(rt): State<AppState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+pub async fn destroy_vm(State(rt): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
     let mut rt = rt.lock().unwrap();
     match rt.destroy_vm(&id) {
         Ok(()) => (StatusCode::OK, Json(ApiRespEmpty::ok())),
@@ -76,10 +73,7 @@ pub async fn destroy_vm(
 }
 
 /// POST /api/vms/:id/stop — stop a VM.
-pub async fn stop_vm(
-    State(rt): State<AppState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+pub async fn stop_vm(State(rt): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
     let mut rt = rt.lock().unwrap();
     match rt.stop_vm(&id) {
         Ok(()) => (StatusCode::OK, Json(ApiRespEmpty::ok())),
@@ -91,10 +85,7 @@ pub async fn stop_vm(
 }
 
 /// POST /api/vms/:id/start — start a stopped VM.
-pub async fn start_vm(
-    State(rt): State<AppState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+pub async fn start_vm(State(rt): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
     let mut rt = rt.lock().unwrap();
     match rt.start_vm(&id) {
         Ok(()) => (StatusCode::OK, Json(ApiRespEmpty::ok())),
