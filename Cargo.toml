@@ -10,8 +10,8 @@ members = [
 [workspace.package]
 version = "0.5.0"
 edition = "2024"
-authors = ["FanHui <fanhui.x@gmail.com>"]
-license = "MIT OR Apache-2.0"
+authors = ["fh <hui.fan@mail.ru>"]
+license = "MIT"
 
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
