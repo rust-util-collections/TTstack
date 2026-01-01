@@ -167,10 +167,22 @@ mod platform {
     }
 
     fn nft(rule: &str) -> Result<()> {
-        let output = Command::new("sh")
-            .args(["-c", &format!("nft {rule}")])
-            .output()
-            .c(d!("nft exec"))?;
+        use std::io::Write;
+        let mut child = Command::new("nft")
+            .arg("-f")
+            .arg("-")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .c(d!("nft spawn"))?;
+
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(rule.as_bytes());
+            let _ = stdin.write_all(b"\n");
+        }
+
+        let output = child.wait_with_output().c(d!("nft wait"))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
