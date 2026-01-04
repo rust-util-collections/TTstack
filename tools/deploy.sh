@@ -72,7 +72,13 @@ install_bin() {
 }
 
 install_systemd_unit() {
-    local name="$1" exec_start="$2"
+    local name="$1" exec_start="$2" run_as_root="${3:-false}"
+    local user_line="User=${TTUSER}"
+    local group_line="Group=${TTUSER}"
+    if [ "$run_as_root" = "true" ]; then
+        user_line="# Runs as root (needs NET_ADMIN for bridge/TAP/nftables)"
+        group_line=""
+    fi
     cat > "/etc/systemd/system/${name}.service" <<EOF
 [Unit]
 Description=TTstack ${name}
@@ -80,8 +86,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=${TTUSER}
-Group=${TTUSER}
+${user_line}
+${group_line}
 ExecStart=${exec_start}
 Restart=on-failure
 RestartSec=5
@@ -131,7 +137,7 @@ local_deploy_agent() {
     cmd="$cmd --disk-total $disk"
     [ -n "$host_id" ] && cmd="$cmd --host-id $host_id"
 
-    install_systemd_unit "tt-agent" "$cmd"
+    install_systemd_unit "tt-agent" "$cmd" "true"
     restart_service "tt-agent"
 }
 
