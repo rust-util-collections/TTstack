@@ -10,11 +10,19 @@ use std::process::Command;
 use std::sync::LazyLock;
 
 /// Cached path to the container runtime binary.
+///
+/// Prefer `docker` when available since it has wider ecosystem
+/// compatibility; fall back to `podman` for rootless operation.
 static RUNTIME: LazyLock<&'static str> = LazyLock::new(|| {
-    if Command::new("podman").arg("--version").output().is_ok() {
-        "podman"
-    } else {
+    if Command::new("docker")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
         "docker"
+    } else {
+        "podman"
     }
 });
 
@@ -76,10 +84,9 @@ impl VmEngine for DockerEngine {
             .output()
             .c(d!())?;
 
-        alt!(
-            output.status.success(),
-            return Err(eg!("container start failed"))
-        );
+        if !output.status.success() {
+            return Err(eg!("container start failed"));
+        }
         Ok(())
     }
 
@@ -90,10 +97,9 @@ impl VmEngine for DockerEngine {
             .output()
             .c(d!())?;
 
-        alt!(
-            output.status.success(),
-            return Err(eg!("container stop failed"))
-        );
+        if !output.status.success() {
+            return Err(eg!("container stop failed"));
+        }
         Ok(())
     }
 
@@ -105,10 +111,9 @@ impl VmEngine for DockerEngine {
             .output()
             .c(d!())?;
 
-        alt!(
-            output.status.success(),
-            return Err(eg!("container remove failed"))
-        );
+        if !output.status.success() {
+            return Err(eg!("container remove failed"));
+        }
         Ok(())
     }
 
