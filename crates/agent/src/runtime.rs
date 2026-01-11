@@ -121,15 +121,23 @@ impl Runtime {
         let ip_idx = self.next_ip_idx.fetch_add(1, Ordering::SeqCst);
         let ip = net::vm_ip(ip_idx);
 
-        // Clone the image
-        let base_image = format!("{}/{}", self.image_dir, req.image);
-        let clone_path = format!("{}/clone-{}", self.runtime_dir, req.vm_id);
-        self.store
-            .clone_image(&base_image, &clone_path)
-            .c(d!("image clone"))?;
+        // Docker/Podman containers use registry images directly;
+        // other engines need a local filesystem image clone.
+        let uses_local_image = req.engine != Engine::Docker;
 
-        // Create TAP device
-        net::create_tap(&req.vm_id, &ip).c(d!("TAP setup"))?;
+        let clone_path = format!("{}/clone-{}", self.runtime_dir, req.vm_id);
+        if uses_local_image {
+            let base_image = format!("{}/{}", self.image_dir, req.image);
+            self.store
+                .clone_image(&base_image, &clone_path)
+                .c(d!("image clone"))?;
+        }
+
+        // Docker/Podman manages its own networking;
+        // other engines need a TAP device on the host bridge.
+        if uses_local_image {
+            net::create_tap(&req.vm_id, &ip).c(d!("TAP setup"))?;
+        }
 
         // Allocate port mappings (use checked arithmetic to avoid u16 overflow)
         let mut port_map = BTreeMap::new();
@@ -162,8 +170,10 @@ impl Runtime {
         // Launch using the appropriate engine
         let eng = engine::create_engine(req.engine);
         if let Err(e) = eng.create(&vm, &clone_path) {
-            let _ = self.store.remove_image(&clone_path);
-            net::destroy_tap(&req.vm_id).unwrap_or(());
+            if uses_local_image {
+                let _ = self.store.remove_image(&clone_path);
+                net::destroy_tap(&req.vm_id).unwrap_or(());
+            }
             delete_vm(&self.db, &vm.id)?;
             return Err(e).c(d!("engine create"));
         }
