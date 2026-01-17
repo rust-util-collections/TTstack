@@ -41,6 +41,7 @@ impl FirecrackerEngine {
     }
 
     fn write_config(&self, vm: &Vm, image_path: &str) -> Result<()> {
+        let tap = crate::net::tap_name(&vm.id);
         let config = serde_json::json!({
             "boot-source": {
                 "kernel_image_path": format!("{image_path}/vmlinux"),
@@ -48,7 +49,7 @@ impl FirecrackerEngine {
             },
             "drives": [{
                 "drive_id": "rootfs",
-                "path_on_host": image_path,
+                "path_on_host": format!("{image_path}/rootfs.ext4"),
                 "is_root_device": true,
                 "is_read_only": false
             }],
@@ -58,7 +59,7 @@ impl FirecrackerEngine {
             },
             "network-interfaces": [{
                 "iface_id": "eth0",
-                "host_dev_name": format!("tap-{}", vm.id),
+                "host_dev_name": tap,
             }]
         });
 
