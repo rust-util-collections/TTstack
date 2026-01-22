@@ -23,6 +23,7 @@ impl QemuEngine {
     }
 
     fn build_cmd(&self, vm: &Vm, image_path: &str) -> Command {
+        let tap = crate::net::tap_name(&vm.id);
         let mut cmd = Command::new("qemu-system-x86_64");
         cmd.args(["-enable-kvm", "-daemonize"])
             .args(["-name", &vm.id])
@@ -34,7 +35,7 @@ impl QemuEngine {
             ])
             .args([
                 "-netdev",
-                &format!("tap,id=net0,ifname=tap-{},script=no,downscript=no", vm.id),
+                &format!("tap,id=net0,ifname={tap},script=no,downscript=no"),
             ])
             .args(["-device", "virtio-net-pci,netdev=net0"])
             .args(["-pidfile", &self.pid_path(vm)])
