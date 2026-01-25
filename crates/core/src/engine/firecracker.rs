@@ -93,33 +93,56 @@ impl VmEngine for FirecrackerEngine {
             return Err(eg!("firecracker socket not found for VM {}", vm.id));
         }
 
+        // Resume a paused VM via the Firecracker API
         let output = Command::new("curl")
             .args([
                 "--unix-socket",
                 &sock,
+                "-s",
                 "-X",
-                "PUT",
-                "http://localhost/actions",
+                "PATCH",
+                "http://localhost/vm",
                 "-H",
                 "Content-Type: application/json",
                 "-d",
-                r#"{"action_type": "InstanceStart"}"#,
+                r#"{"state": "Resumed"}"#,
             ])
             .output()
-            .c(d!("start firecracker"))?;
+            .c(d!("resume firecracker"))?;
 
         if !output.status.success() {
-            return Err(eg!("firecracker start failed"));
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(eg!("firecracker resume failed: {}", stderr));
         }
         Ok(())
     }
 
     fn stop(&self, vm: &Vm) -> Result<()> {
-        if let Ok(pid) = Self::read_pid(vm) {
-            let _ = nix::sys::signal::kill(
-                nix::unistd::Pid::from_raw(pid as i32),
-                nix::sys::signal::Signal::SIGTERM,
-            );
+        let sock = Self::socket_path(vm);
+        if !Path::new(&sock).exists() {
+            return Ok(());
+        }
+
+        // Pause the VM via the Firecracker API (preserves the process)
+        let output = Command::new("curl")
+            .args([
+                "--unix-socket",
+                &sock,
+                "-s",
+                "-X",
+                "PATCH",
+                "http://localhost/vm",
+                "-H",
+                "Content-Type: application/json",
+                "-d",
+                r#"{"state": "Paused"}"#,
+            ])
+            .output()
+            .c(d!("pause firecracker"))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(eg!("firecracker pause failed: {}", stderr));
         }
         Ok(())
     }
