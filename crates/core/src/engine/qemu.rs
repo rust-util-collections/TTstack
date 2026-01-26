@@ -109,29 +109,19 @@ impl VmEngine for QemuEngine {
     }
 
     fn stop(&self, vm: &Vm) -> Result<()> {
-        // Try graceful shutdown via QEMU monitor first
+        // Pause the VM via QEMU monitor "stop" command.
+        // This freezes the vCPU without killing the QEMU process,
+        // allowing later resume via "cont".
         let sock = self.monitor_path(vm);
         if Path::new(&sock).exists() {
             let _ = Command::new("sh")
                 .args([
                     "-c",
-                    &format!(r#"echo "system_powerdown" | socat - UNIX-CONNECT:{sock}"#),
+                    &format!(r#"echo "stop" | socat - UNIX-CONNECT:{sock}"#),
                 ])
                 .output();
-
-            // Give the guest a moment to shut down
-            std::thread::sleep(std::time::Duration::from_secs(2));
         }
-
-        // If still alive, send SIGTERM
-        match self.read_pid(vm) {
-            Ok(pid) if Self::process_alive(pid) => nix::sys::signal::kill(
-                nix::unistd::Pid::from_raw(pid as i32),
-                nix::sys::signal::Signal::SIGTERM,
-            )
-            .c(d!("stop qemu")),
-            _ => Ok(()),
-        }
+        Ok(())
     }
 
     fn destroy(&self, vm: &Vm) -> Result<()> {
