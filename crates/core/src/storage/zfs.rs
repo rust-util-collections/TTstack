@@ -11,23 +11,52 @@ use std::process::Command;
 pub struct ZfsStore;
 
 impl ZfsStore {
+    /// Convert a filesystem path to a ZFS dataset name.
+    ///
+    /// ZFS datasets are mounted at their mountpoint, so a path like
+    /// `/ttpool/images/foo` corresponds to dataset `ttpool/images/foo`.
+    /// We resolve this by querying `zfs list` for the parent mountpoint.
+    fn path_to_dataset(path: &str) -> Result<String> {
+        // Try the path as-is first (in case it's already a dataset name)
+        let check = Command::new("zfs")
+            .args(["list", "-H", "-o", "name", path])
+            .output();
+        if let Ok(ref out) = check {
+            if out.status.success() {
+                return Ok(String::from_utf8_lossy(&out.stdout).trim().to_string());
+            }
+        }
+
+        // Strip leading '/' and try as dataset name
+        let stripped = path.strip_prefix('/').unwrap_or(path);
+        let check = Command::new("zfs")
+            .args(["list", "-H", "-o", "name", stripped])
+            .output();
+        if let Ok(ref out) = check {
+            if out.status.success() {
+                return Ok(String::from_utf8_lossy(&out.stdout).trim().to_string());
+            }
+        }
+
+        // Assume it's a filesystem path: strip leading '/' to form dataset name
+        Ok(stripped.to_string())
+    }
+
     /// Derive a snapshot name from the base dataset.
     fn snap_name(base: &str) -> String {
         format!("{base}@ttsnap")
     }
 
     /// Ensure a snapshot exists for the base dataset, creating one if needed.
-    fn ensure_snapshot(base: &str) -> Result<()> {
-        let snap = Self::snap_name(base);
+    fn ensure_snapshot(dataset: &str) -> Result<()> {
+        let snap = Self::snap_name(dataset);
 
-        // Check if snapshot already exists
         let check = Command::new("zfs")
             .args(["list", "-t", "snapshot", &snap])
             .output()
             .c(d!())?;
 
         if !check.status.success() {
-            // Create the snapshot
             let output = Command::new("zfs")
                 .args(["snapshot", &snap])
                 .output()
@@ -45,11 +74,14 @@ impl ZfsStore {
 
 impl ImageStore for ZfsStore {
     fn clone_image(&self, base: &str, target: &str) -> Result<()> {
-        Self::ensure_snapshot(base)?;
-        let snap = Self::snap_name(base);
+        let base_ds = Self::path_to_dataset(base)?;
+        let target_ds = Self::path_to_dataset(target)?;
+
+        Self::ensure_snapshot(&base_ds)?;
+        let snap = Self::snap_name(&base_ds);
 
         let output = Command::new("zfs")
-            .args(["clone", &snap, target])
+            .args(["clone", &snap, &target_ds])
             .output()
             .c(d!())?;
 
@@ -62,8 +94,9 @@ impl ImageStore for ZfsStore {
     }
 
     fn remove_image(&self, path: &str) -> Result<()> {
+        let ds = Self::path_to_dataset(path)?;
         let output = Command::new("zfs")
-            .args(["destroy", "-r", path])
+            .args(["destroy", "-r", &ds])
             .output()
             .c(d!())?;
 
@@ -76,8 +109,9 @@ impl ImageStore for ZfsStore {
     }
 
     fn list_images(&self, base_dir: &str) -> Result<Vec<String>> {
+        let ds = Self::path_to_dataset(base_dir)?;
         let output = Command::new("zfs")
-            .args(["list", "-H", "-o", "name", "-r", base_dir])
+            .args(["list", "-H", "-o", "name", "-r", &ds])
             .output()
             .c(d!())?;
 
@@ -88,17 +122,17 @@ impl ImageStore for ZfsStore {
         let stdout = String::from_utf8_lossy(&output.stdout);
         Ok(stdout
             .lines()
-            .filter(|l| !l.is_empty() && *l != base_dir)
+            .filter(|l| !l.is_empty() && *l != ds)
             .map(|l| {
-                // Return just the leaf name
                 l.rsplit('/').next().unwrap_or(l).to_string()
             })
             .collect())
     }
 
     fn image_exists(&self, path: &str) -> Result<bool> {
+        let ds = Self::path_to_dataset(path)?;
         let output = Command::new("zfs")
-            .args(["list", "-H", path])
+            .args(["list", "-H", &ds])
             .output()
             .c(d!())?;
 

@@ -22,8 +22,40 @@ impl QemuEngine {
         Self
     }
 
+    /// Resolve the disk image file path.
+    ///
+    /// If `image_path` is a regular file, use it directly.
+    /// If it's a directory (e.g. a ZFS dataset or Btrfs subvolume),
+    /// look for a qcow2 file inside it.
+    fn resolve_disk(image_path: &str) -> String {
+        use std::path::Path;
+        let p = Path::new(image_path);
+        if p.is_dir() {
+            // Look for a .qcow2 file first, then any single file
+            if let Ok(entries) = std::fs::read_dir(p) {
+                let files: Vec<_> = entries
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.path().is_file())
+                    .collect();
+                if let Some(qcow2) = files.iter().find(|f| {
+                    f.path().extension().is_some_and(|ext| ext == "qcow2")
+                }) {
+                    return qcow2.path().to_string_lossy().into_owned();
+                }
+                if files.len() == 1 {
+                    return files[0].path().to_string_lossy().into_owned();
+                }
+            }
+            // Fallback: assume disk.qcow2
+            format!("{image_path}/disk.qcow2")
+        } else {
+            image_path.to_string()
+        }
+    }
+
     fn build_cmd(&self, vm: &Vm, image_path: &str) -> Command {
         let tap = crate::net::tap_name(&vm.id);
+        let disk = Self::resolve_disk(image_path);
         let mut cmd = Command::new("qemu-system-x86_64");
         cmd.args(["-enable-kvm", "-daemonize"])
             .args(["-name", &vm.id])
@@ -31,7 +63,7 @@ impl QemuEngine {
             .args(["-smp", &vm.cpu.to_string()])
             .args([
                 "-drive",
-                &format!("file={image_path},format=qcow2,if=virtio"),
+                &format!("file={disk},format=qcow2,if=virtio"),
             ])
             .args([
                 "-netdev",
