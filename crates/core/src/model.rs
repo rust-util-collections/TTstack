@@ -89,6 +89,7 @@ impl std::str::FromStr for Storage {
 pub enum VmState {
     Running,
     Stopped,
+    Paused,
     Creating,
     Failed,
 }
@@ -98,6 +99,7 @@ impl fmt::Display for VmState {
         match self {
             Self::Running => write!(f, "running"),
             Self::Stopped => write!(f, "stopped"),
+            Self::Paused => write!(f, "paused"),
             Self::Creating => write!(f, "creating"),
             Self::Failed => write!(f, "failed"),
         }
@@ -315,6 +317,7 @@ mod tests {
     fn vmstate_display() {
         assert_eq!(VmState::Running.to_string(), "running");
         assert_eq!(VmState::Stopped.to_string(), "stopped");
+        assert_eq!(VmState::Paused.to_string(), "paused");
         assert_eq!(VmState::Creating.to_string(), "creating");
         assert_eq!(VmState::Failed.to_string(), "failed");
     }
