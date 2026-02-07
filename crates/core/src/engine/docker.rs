@@ -131,6 +131,7 @@ impl VmEngine for DockerEngine {
         let status = String::from_utf8_lossy(&output.stdout);
         match status.trim() {
             "running" => Ok(VmState::Running),
+            "paused" => Ok(VmState::Paused),
             "exited" | "dead" | "created" => Ok(VmState::Stopped),
             _ => Ok(VmState::Failed),
         }

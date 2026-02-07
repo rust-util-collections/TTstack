@@ -174,7 +174,25 @@ impl VmEngine for QemuEngine {
 
     fn state(&self, vm: &Vm) -> Result<VmState> {
         match self.read_pid(vm) {
-            Ok(pid) if Self::process_alive(pid) => Ok(VmState::Running),
+            Ok(pid) if Self::process_alive(pid) => {
+                // Query QEMU monitor to distinguish Running vs Paused
+                let sock = self.monitor_path(vm);
+                if Path::new(&sock).exists() {
+                    if let Ok(output) = Command::new("sh")
+                        .args([
+                            "-c",
+                            &format!(r#"echo "info status" | socat - UNIX-CONNECT:{sock}"#),
+                        ])
+                        .output()
+                    {
+                        let body = String::from_utf8_lossy(&output.stdout);
+                        if body.contains("paused") {
+                            return Ok(VmState::Paused);
+                        }
+                    }
+                }
+                Ok(VmState::Running)
+            }
             _ => Ok(VmState::Stopped),
         }
     }
