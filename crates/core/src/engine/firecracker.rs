@@ -78,13 +78,22 @@ impl VmEngine for FirecrackerEngine {
         let sock = Self::socket_path(vm);
         let config = Self::config_path(vm);
 
-        let child = Command::new("firecracker")
+        let mut child = Command::new("firecracker")
             .args(["--api-sock", &sock])
             .args(["--config-file", &config])
             .spawn()
             .c(d!("spawn firecracker"))?;
 
-        std::fs::write(Self::pid_path(vm), child.id().to_string()).c(d!("write pid"))
+        let pid = child.id();
+        std::fs::write(Self::pid_path(vm), pid.to_string()).c(d!("write pid"))?;
+
+        // Spawn a reaper thread so the child process is wait()ed on,
+        // preventing zombie processes if the Firecracker VM exits.
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
+
+        Ok(())
     }
 
     fn start(&self, vm: &Vm) -> Result<()> {
