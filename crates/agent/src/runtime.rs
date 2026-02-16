@@ -60,7 +60,7 @@ impl Runtime {
         let mut disk_used = 0u32;
         let mut vm_count = 0u32;
         for vm in &vms {
-            if vm.state == VmState::Running || vm.state == VmState::Creating {
+            if vm.state == VmState::Running || vm.state == VmState::Paused || vm.state == VmState::Creating {
                 cpu_used += vm.cpu;
                 mem_used += vm.mem;
                 disk_used += vm.disk;
@@ -224,14 +224,25 @@ impl Runtime {
     pub fn stop_vm(&mut self, vm_id: &str) -> Result<()> {
         let mut vm = load_vm(&self.db, vm_id)?.ok_or_else(|| eg!("VM not found: {}", vm_id))?;
 
+        match vm.state {
+            VmState::Running => {}
+            VmState::Paused | VmState::Stopped => return Ok(()),
+            _ => return Err(eg!("cannot stop VM in state {}", vm.state)),
+        }
+
         let eng = engine::create_engine(vm.engine);
         eng.stop(&vm).c(d!("stop VM"))?;
 
-        vm.state = VmState::Stopped;
+        // FC/QEMU pause (preserve process); Docker/Jail fully stop
+        let pauses = matches!(vm.engine, Engine::Qemu | Engine::Firecracker);
+        if pauses {
+            vm.state = VmState::Paused;
+        } else {
+            vm.state = VmState::Stopped;
+            self.resource.cpu_used = self.resource.cpu_used.saturating_sub(vm.cpu);
+            self.resource.mem_used = self.resource.mem_used.saturating_sub(vm.mem);
+        }
         save_vm(&self.db, &vm)?;
-
-        self.resource.cpu_used = self.resource.cpu_used.saturating_sub(vm.cpu);
-        self.resource.mem_used = self.resource.mem_used.saturating_sub(vm.mem);
 
         Ok(())
     }
@@ -239,8 +250,18 @@ impl Runtime {
     pub fn start_vm(&mut self, vm_id: &str) -> Result<()> {
         let mut vm = load_vm(&self.db, vm_id)?.ok_or_else(|| eg!("VM not found: {}", vm_id))?;
 
-        if !self.resource.can_fit(vm.cpu, vm.mem, 0) {
-            return Err(eg!("insufficient resources to restart VM"));
+        let prev_state = vm.state;
+        match prev_state {
+            VmState::Stopped | VmState::Paused => {}
+            VmState::Running => return Ok(()),
+            _ => return Err(eg!("cannot start VM in state {}", vm.state)),
+        }
+
+        // Only check/allocate resources when resuming from fully Stopped
+        if prev_state == VmState::Stopped {
+            if !self.resource.can_fit(vm.cpu, vm.mem, 0) {
+                return Err(eg!("insufficient resources to restart VM"));
+            }
         }
 
         let eng = engine::create_engine(vm.engine);
@@ -249,8 +270,10 @@ impl Runtime {
         vm.state = VmState::Running;
         save_vm(&self.db, &vm)?;
 
-        self.resource.cpu_used += vm.cpu;
-        self.resource.mem_used += vm.mem;
+        if prev_state == VmState::Stopped {
+            self.resource.cpu_used += vm.cpu;
+            self.resource.mem_used += vm.mem;
+        }
 
         Ok(())
     }
@@ -271,7 +294,7 @@ impl Runtime {
         let clone_path = format!("{}/clone-{}", self.runtime_dir, vm_id);
         let _ = self.store.remove_image(&clone_path);
 
-        if vm.state == VmState::Running || vm.state == VmState::Creating {
+        if vm.state == VmState::Running || vm.state == VmState::Paused || vm.state == VmState::Creating {
             self.resource.cpu_used = self.resource.cpu_used.saturating_sub(vm.cpu);
             self.resource.mem_used = self.resource.mem_used.saturating_sub(vm.mem);
         }
