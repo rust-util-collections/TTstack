@@ -185,13 +185,28 @@ impl Runtime {
             return Err(e).c(d!("engine create"));
         }
 
-        // Set up port forwarding
-        for (&guest_port, &host_port) in &port_map {
-            net::add_port_forward(host_port, &ip, guest_port).c(d!("port forward"))?;
-        }
+        // Set up port forwarding and outgoing rules; rollback on failure
+        let post_create = || -> Result<()> {
+            for (&guest_port, &host_port) in &port_map {
+                net::add_port_forward(host_port, &ip, guest_port).c(d!("port forward"))?;
+            }
+            if req.deny_outgoing {
+                net::deny_outgoing(&ip).c(d!("deny outgoing"))?;
+            }
+            Ok(())
+        };
 
-        if req.deny_outgoing {
-            net::deny_outgoing(&ip).c(d!("deny outgoing"))?;
+        if let Err(e) = post_create() {
+            // Rollback: undo partial network setup and destroy the VM
+            let _ = net::remove_port_forwards(&ip);
+            let _ = net::allow_outgoing(&ip);
+            let _ = eng.destroy(&vm);
+            if uses_local_image {
+                let _ = self.store.remove_image(&clone_path);
+                let _ = net::destroy_tap(&req.vm_id);
+            }
+            let _ = delete_vm(&self.db, &vm.id);
+            return Err(e).c(d!("post-create setup"));
         }
 
         // Update resource tracking
