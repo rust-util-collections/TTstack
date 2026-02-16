@@ -82,10 +82,17 @@ impl Runtime {
 
         // Restore network rules for persisted VMs
         for vm in &vms {
-            if vm.state == VmState::Running {
-                let _ = net::create_tap(&vm.id, &vm.ip);
+            if vm.state == VmState::Running || vm.state == VmState::Paused {
+                if let Err(e) = net::create_tap(&vm.id, &vm.ip) {
+                    eprintln!("[agent] WARN: failed to restore TAP for VM {}: {e}", vm.id);
+                }
                 for (&guest, &host) in &vm.port_map {
-                    let _ = net::add_port_forward(host, &vm.ip, guest);
+                    if let Err(e) = net::add_port_forward(host, &vm.ip, guest) {
+                        eprintln!(
+                            "[agent] WARN: failed to restore port forward {}->{}:{} for VM {}: {e}",
+                            host, vm.ip, guest, vm.id
+                        );
+                    }
                 }
             }
         }
