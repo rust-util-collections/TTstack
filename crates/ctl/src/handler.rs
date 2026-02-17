@@ -365,7 +365,23 @@ pub async fn delete_env(State(db): State<CtlState>, Path(id): Path<String>) -> i
     for vm in &vms {
         if let Some(host) = hosts.iter().find(|h| h.id == vm.host_id) {
             let url = format!("http://{}/api/vms/{}", host.addr, vm.id);
-            let _ = client.delete(&url).send().await;
+            match client.delete(&url).send().await {
+                Ok(r) if !r.status().is_success() => {
+                    eprintln!(
+                        "[ctl] WARN: agent {} returned {} when deleting VM {}",
+                        host.addr,
+                        r.status(),
+                        vm.id
+                    );
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[ctl] WARN: failed to contact agent {} to delete VM {}: {e}",
+                        host.addr, vm.id
+                    );
+                }
+                _ => {}
+            }
         }
     }
 
@@ -402,7 +418,23 @@ pub async fn stop_env(State(db): State<CtlState>, Path(id): Path<String>) -> imp
     for vm in &vms {
         if let Some(host) = hosts.iter().find(|h| h.id == vm.host_id) {
             let url = format!("http://{}/api/vms/{}/stop", host.addr, vm.id);
-            let _ = client.post(&url).send().await;
+            match client.post(&url).send().await {
+                Ok(r) if !r.status().is_success() => {
+                    eprintln!(
+                        "[ctl] WARN: agent {} returned {} when stopping VM {}",
+                        host.addr,
+                        r.status(),
+                        vm.id
+                    );
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[ctl] WARN: failed to contact agent {} to stop VM {}: {e}",
+                        host.addr, vm.id
+                    );
+                }
+                _ => {}
+            }
         }
     }
 
@@ -435,7 +467,23 @@ pub async fn start_env(State(db): State<CtlState>, Path(id): Path<String>) -> im
     for vm in &vms {
         if let Some(host) = hosts.iter().find(|h| h.id == vm.host_id) {
             let url = format!("http://{}/api/vms/{}/start", host.addr, vm.id);
-            let _ = client.post(&url).send().await;
+            match client.post(&url).send().await {
+                Ok(r) if !r.status().is_success() => {
+                    eprintln!(
+                        "[ctl] WARN: agent {} returned {} when starting VM {}",
+                        host.addr,
+                        r.status(),
+                        vm.id
+                    );
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[ctl] WARN: failed to contact agent {} to start VM {}: {e}",
+                        host.addr, vm.id
+                    );
+                }
+                _ => {}
+            }
         }
     }
 
