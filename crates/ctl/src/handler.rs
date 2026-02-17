@@ -8,12 +8,21 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use ttcore::api::*;
 use ttcore::model::*;
 
 /// Shared controller state.
 pub type CtlState = Arc<Mutex<Db>>;
+
+/// Lock the DB mutex, recovering from poisoning if a prior
+/// handler panicked while holding the lock.
+fn lock_db(db: &CtlState) -> MutexGuard<'_, Db> {
+    db.lock().unwrap_or_else(|e| {
+        eprintln!("[ctl] WARN: db mutex was poisoned, recovering");
+        e.into_inner()
+    })
+}
 
 /// HTTP client for agent communication.
 fn agent_client() -> reqwest::Client {
@@ -66,7 +75,7 @@ pub async fn register_host(
         }
     };
 
-    let db = db.lock().unwrap();
+    let db = lock_db(&db);
 
     if db.host_count().unwrap_or(0) >= MAX_HOSTS {
         return (
@@ -99,7 +108,7 @@ pub async fn register_host(
 
 /// GET /api/hosts
 pub async fn list_hosts(State(db): State<CtlState>) -> impl IntoResponse {
-    let db = db.lock().unwrap();
+    let db = lock_db(&db);
     match db.list_hosts() {
         Ok(hosts) => Json(ApiResp::success(hosts)),
         Err(e) => Json(ApiResp::<Vec<Host>>::err(e.to_string())),
@@ -108,7 +117,7 @@ pub async fn list_hosts(State(db): State<CtlState>) -> impl IntoResponse {
 
 /// GET /api/hosts/:id
 pub async fn get_host(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
-    let db = db.lock().unwrap();
+    let db = lock_db(&db);
     match db.get_host(&id) {
         Ok(Some(h)) => (StatusCode::OK, Json(ApiResp::success(h))),
         Ok(None) => (
@@ -124,7 +133,7 @@ pub async fn get_host(State(db): State<CtlState>, Path(id): Path<String>) -> imp
 
 /// DELETE /api/hosts/:id
 pub async fn remove_host(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
-    let db = db.lock().unwrap();
+    let db = lock_db(&db);
 
     let vms = db.vms_by_host(&id).unwrap_or_default();
     if !vms.is_empty() {
@@ -166,7 +175,7 @@ pub async fn create_env(
 
     // Validate & schedule under lock
     let hosts = {
-        let db = db.lock().unwrap();
+        let db = lock_db(&db);
 
         if let Ok(Some(_)) = db.get_env(&req.id) {
             return (
@@ -273,7 +282,7 @@ pub async fn create_env(
     };
 
     {
-        let db = db.lock().unwrap();
+        let db = lock_db(&db);
         let _ = db.put_env(&env);
         for vm in &created_vms {
             let _ = db.put_vm(vm);
@@ -293,7 +302,7 @@ pub async fn create_env(
 
 /// GET /api/envs
 pub async fn list_envs(State(db): State<CtlState>) -> impl IntoResponse {
-    let db = db.lock().unwrap();
+    let db = lock_db(&db);
     match db.list_envs() {
         Ok(envs) => Json(ApiResp::success(envs)),
         Err(e) => Json(ApiResp::<Vec<Env>>::err(e.to_string())),
@@ -302,7 +311,7 @@ pub async fn list_envs(State(db): State<CtlState>) -> impl IntoResponse {
 
 /// GET /api/envs/:id
 pub async fn get_env(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
-    let db = db.lock().unwrap();
+    let db = lock_db(&db);
     match db.get_env(&id) {
         Ok(Some(env)) => {
             let vms = db.vms_by_env(&id).unwrap_or_default();
@@ -331,7 +340,7 @@ pub async fn get_env(State(db): State<CtlState>, Path(id): Path<String>) -> impl
 /// DELETE /api/envs/:id
 pub async fn delete_env(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
     let (vms, hosts) = {
-        let db = db.lock().unwrap();
+        let db = lock_db(&db);
         match db.get_env(&id) {
             Ok(Some(_)) => {}
             Ok(None) => {
@@ -361,7 +370,7 @@ pub async fn delete_env(State(db): State<CtlState>, Path(id): Path<String>) -> i
     }
 
     {
-        let db = db.lock().unwrap();
+        let db = lock_db(&db);
         for vm in &vms {
             let _ = db.remove_vm(&vm.id);
         }
@@ -374,7 +383,7 @@ pub async fn delete_env(State(db): State<CtlState>, Path(id): Path<String>) -> i
 /// POST /api/envs/:id/stop
 pub async fn stop_env(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
     let (mut env, vms, hosts) = {
-        let db = db.lock().unwrap();
+        let db = lock_db(&db);
         let env = match db.get_env(&id) {
             Ok(Some(e)) => e,
             _ => {
@@ -398,7 +407,7 @@ pub async fn stop_env(State(db): State<CtlState>, Path(id): Path<String>) -> imp
     }
 
     env.state = EnvState::Stopped;
-    let db = db.lock().unwrap();
+    let db = lock_db(&db);
     let _ = db.put_env(&env);
 
     (StatusCode::OK, Json(ApiRespEmpty::ok()))
@@ -407,7 +416,7 @@ pub async fn stop_env(State(db): State<CtlState>, Path(id): Path<String>) -> imp
 /// POST /api/envs/:id/start
 pub async fn start_env(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
     let (mut env, vms, hosts) = {
-        let db = db.lock().unwrap();
+        let db = lock_db(&db);
         let env = match db.get_env(&id) {
             Ok(Some(e)) => e,
             _ => {
@@ -431,7 +440,7 @@ pub async fn start_env(State(db): State<CtlState>, Path(id): Path<String>) -> im
     }
 
     env.state = EnvState::Active;
-    let db = db.lock().unwrap();
+    let db = lock_db(&db);
     let _ = db.put_env(&env);
 
     (StatusCode::OK, Json(ApiRespEmpty::ok()))
@@ -442,7 +451,7 @@ pub async fn start_env(State(db): State<CtlState>, Path(id): Path<String>) -> im
 /// GET /api/images
 pub async fn list_images(State(db): State<CtlState>) -> impl IntoResponse {
     let hosts = {
-        let db = db.lock().unwrap();
+        let db = lock_db(&db);
         db.list_hosts().unwrap_or_default()
     };
 
@@ -477,7 +486,7 @@ pub async fn fleet_status(State(db): State<CtlState>) -> impl IntoResponse {
     let client = agent_client();
     refresh_all_hosts(&db, &client).await;
 
-    let db = db.lock().unwrap();
+    let db = lock_db(&db);
     match db.fleet_status() {
         Ok(s) => Json(ApiResp::success(s)),
         Err(e) => Json(ApiResp::<FleetStatus>::err(e.to_string())),
@@ -488,7 +497,7 @@ pub async fn fleet_status(State(db): State<CtlState>) -> impl IntoResponse {
 
 /// GET /api/vms/:id — get a single VM by ID (across all hosts).
 pub async fn get_vm(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
-    let db = db.lock().unwrap();
+    let db = lock_db(&db);
     match db.get_vm(&id) {
         Ok(Some(vm)) => (StatusCode::OK, Json(ApiResp::success(vm))),
         Ok(None) => (
@@ -514,7 +523,7 @@ fn now() -> u64 {
 /// Refresh resource snapshots for all hosts from their agents.
 async fn refresh_all_hosts(state: &CtlState, client: &reqwest::Client) {
     let hosts = {
-        let db = state.lock().unwrap();
+        let db = lock_db(state);
         db.list_hosts().unwrap_or_default()
     };
 
@@ -536,7 +545,7 @@ async fn refresh_all_hosts(state: &CtlState, client: &reqwest::Client) {
             }
         }
 
-        let db = state.lock().unwrap();
+        let db = lock_db(state);
         let _ = db.put_host(&updated);
     }
 }

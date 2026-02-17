@@ -5,22 +5,31 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use ttcore::api::*;
 use ttcore::model::Vm;
 
 /// Shared application state.
 pub type AppState = Arc<Mutex<Runtime>>;
 
+/// Lock the runtime mutex, recovering from poisoning if a prior
+/// handler panicked while holding the lock.
+fn lock_rt(rt: &AppState) -> MutexGuard<'_, Runtime> {
+    rt.lock().unwrap_or_else(|e| {
+        eprintln!("[agent] WARN: runtime mutex was poisoned, recovering");
+        e.into_inner()
+    })
+}
+
 /// GET /api/info — report host resources and capabilities.
 pub async fn get_info(State(rt): State<AppState>) -> impl IntoResponse {
-    let rt = rt.lock().unwrap();
+    let rt = lock_rt(&rt);
     Json(ApiResp::success(rt.agent_info()))
 }
 
 /// GET /api/images — list available base images.
 pub async fn list_images(State(rt): State<AppState>) -> impl IntoResponse {
-    let rt = rt.lock().unwrap();
+    let rt = lock_rt(&rt);
     Json(ApiResp::success(rt.list_images()))
 }
 
@@ -29,7 +38,7 @@ pub async fn create_vm(
     State(rt): State<AppState>,
     Json(req): Json<CreateVmReq>,
 ) -> impl IntoResponse {
-    let mut rt = rt.lock().unwrap();
+    let mut rt = lock_rt(&rt);
     match rt.create_vm(&req) {
         Ok(vm) => (
             StatusCode::CREATED,
@@ -44,13 +53,13 @@ pub async fn create_vm(
 
 /// GET /api/vms — list all VMs on this host.
 pub async fn list_vms(State(rt): State<AppState>) -> impl IntoResponse {
-    let rt = rt.lock().unwrap();
+    let rt = lock_rt(&rt);
     Json(ApiResp::success(rt.list_vms()))
 }
 
 /// GET /api/vms/:id — get a specific VM.
 pub async fn get_vm(State(rt): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
-    let rt = rt.lock().unwrap();
+    let rt = lock_rt(&rt);
     match rt.get_vm(&id) {
         Some(vm) => (StatusCode::OK, Json(ApiResp::success(vm))),
         None => (
@@ -62,7 +71,7 @@ pub async fn get_vm(State(rt): State<AppState>, Path(id): Path<String>) -> impl 
 
 /// DELETE /api/vms/:id — destroy a VM.
 pub async fn destroy_vm(State(rt): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
-    let mut rt = rt.lock().unwrap();
+    let mut rt = lock_rt(&rt);
     match rt.destroy_vm(&id) {
         Ok(()) => (StatusCode::OK, Json(ApiRespEmpty::ok())),
         Err(e) => (
@@ -74,7 +83,7 @@ pub async fn destroy_vm(State(rt): State<AppState>, Path(id): Path<String>) -> i
 
 /// POST /api/vms/:id/stop — stop a VM.
 pub async fn stop_vm(State(rt): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
-    let mut rt = rt.lock().unwrap();
+    let mut rt = lock_rt(&rt);
     match rt.stop_vm(&id) {
         Ok(()) => (StatusCode::OK, Json(ApiRespEmpty::ok())),
         Err(e) => (
@@ -86,7 +95,7 @@ pub async fn stop_vm(State(rt): State<AppState>, Path(id): Path<String>) -> impl
 
 /// POST /api/vms/:id/start — start a stopped VM.
 pub async fn start_vm(State(rt): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
-    let mut rt = rt.lock().unwrap();
+    let mut rt = lock_rt(&rt);
     match rt.start_vm(&id) {
         Ok(()) => (StatusCode::OK, Json(ApiRespEmpty::ok())),
         Err(e) => (
