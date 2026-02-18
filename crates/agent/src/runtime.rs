@@ -5,7 +5,7 @@
 
 use ruc::*;
 use rusqlite::Connection;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::atomic::{AtomicU32, Ordering};
 use ttcore::api::{AgentInfo, CreateVmReq};
 use ttcore::engine;
@@ -124,9 +124,22 @@ impl Runtime {
             return Err(eg!("VM limit reached"));
         }
 
-        // Allocate IP
-        let ip_idx = self.next_ip_idx.fetch_add(1, Ordering::SeqCst);
-        let ip = net::vm_ip(ip_idx);
+        // Allocate IP, skipping any indices already in use by existing VMs
+        let existing_ips: HashSet<String> = load_all_vms(&self.db)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|vm| vm.ip)
+            .collect();
+        let (ip_idx, ip) = loop {
+            let idx = self.next_ip_idx.fetch_add(1, Ordering::SeqCst);
+            if idx > 65000 {
+                return Err(eg!("IP address space exhausted"));
+            }
+            let candidate = net::vm_ip(idx);
+            if !existing_ips.contains(&candidate) {
+                break (idx, candidate);
+            }
+        };
 
         // Docker/Podman containers use registry images directly;
         // other engines need a local filesystem image clone.
