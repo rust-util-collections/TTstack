@@ -103,6 +103,11 @@ mod platform {
             "add chain ip {NFT_TABLE} postrouting {{ type nat hook postrouting priority 100; policy accept; }}"
         ))?;
 
+        // Flush postrouting before re-adding the masquerade rule to avoid
+        // duplicate rules on agent restart. Do NOT flush prerouting since
+        // per-VM port forwards are restored separately.
+        let _ = nft(&format!("flush chain ip {NFT_TABLE} postrouting"));
+
         nft(&format!(
             "add rule ip {NFT_TABLE} postrouting ip saddr 10.10.0.0/16 masquerade"
         ))?;
