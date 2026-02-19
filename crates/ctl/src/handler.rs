@@ -263,6 +263,16 @@ pub async fn create_env(
         }
     }
 
+    if !warnings.is_empty() {
+        eprintln!(
+            "[ctl] WARN: partial env '{}' creation: {}/{} VMs failed: {}",
+            req.id,
+            warnings.len(),
+            req.vms.len(),
+            warnings.join("; ")
+        );
+    }
+
     if created_vms.is_empty() && !req.vms.is_empty() {
         return (
             StatusCode::BAD_GATEWAY,
