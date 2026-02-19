@@ -22,6 +22,28 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 log() { echo "[create-images] $*"; }
 err() { echo "[create-images] ERROR: $*" >&2; exit 1; }
 
+# ── Cleanup on exit (trap handler) ────────────────────────────────────
+CLEANUP_MOUNT=""
+CLEANUP_NBD=""
+CLEANUP_TMPDIR=""
+
+cleanup() {
+    if [ -n "$CLEANUP_MOUNT" ] && mountpoint -q "$CLEANUP_MOUNT" 2>/dev/null; then
+        log "Cleaning up: unmounting $CLEANUP_MOUNT"
+        umount "$CLEANUP_MOUNT" 2>/dev/null || true
+        rmdir "$CLEANUP_MOUNT" 2>/dev/null || true
+    fi
+    if [ -n "$CLEANUP_NBD" ]; then
+        log "Cleaning up: disconnecting $CLEANUP_NBD"
+        qemu-nbd --disconnect "$CLEANUP_NBD" 2>/dev/null || true
+    fi
+    if [ -n "$CLEANUP_TMPDIR" ] && [ -d "$CLEANUP_TMPDIR" ]; then
+        log "Cleaning up: removing $CLEANUP_TMPDIR"
+        rm -rf "$CLEANUP_TMPDIR"
+    fi
+}
+trap cleanup EXIT
+
 # Firecracker kernel URL (pre-built with virtio_mmio built-in)
 FC_KERNEL_URL="https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/x86_64/kernels/vmlinux.bin"
 
@@ -54,6 +76,7 @@ create_firecracker_image() {
     local mnt
     mnt=$(mktemp -d)
     mount -o loop "$target/rootfs.ext4" "$mnt"
+    CLEANUP_MOUNT="$mnt"
 
     mkdir -p "$mnt"/{bin,sbin,etc,proc,sys,dev,tmp,run,var/log,root}
 
@@ -87,6 +110,7 @@ INITEOF
 
     umount "$mnt"
     rmdir "$mnt"
+    CLEANUP_MOUNT=""
 
     log "Firecracker image ready: $target/"
     log "  vmlinux:     $(du -h "$target/vmlinux" | cut -f1)"
@@ -129,6 +153,7 @@ create_qemu_image() {
 
     # Connect and format
     qemu-nbd --connect="$nbd" "$target"
+    CLEANUP_NBD="$nbd"
     sleep 1
     mkfs.ext4 -q "$nbd"
 
@@ -136,6 +161,7 @@ create_qemu_image() {
     local mnt
     mnt=$(mktemp -d)
     mount "$nbd" "$mnt"
+    CLEANUP_MOUNT="$mnt"
 
     mkdir -p "$mnt"/{bin,sbin,etc,proc,sys,dev,tmp,run,var/log,root}
 
@@ -165,7 +191,9 @@ INITEOF
 
     umount "$mnt"
     rmdir "$mnt"
+    CLEANUP_MOUNT=""
     qemu-nbd --disconnect "$nbd"
+    CLEANUP_NBD=""
 
     log "QEMU image ready: $target ($(du -h "$target" | cut -f1))"
 }
@@ -185,6 +213,7 @@ create_docker_image() {
 
     local tmpdir
     tmpdir=$(mktemp -d)
+    CLEANUP_TMPDIR="$tmpdir"
 
     # Create minimal image with a sleep process
     cat > "$tmpdir/init.c" <<'INITEOF'
@@ -202,6 +231,7 @@ DEOF
 
     $rt build -t "$name" "$tmpdir"
     rm -rf "$tmpdir"
+    CLEANUP_TMPDIR=""
 
     log "Docker image ready: $name"
     log "  Use with: tt env create <env-name> --image $name --engine docker"
