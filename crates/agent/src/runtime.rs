@@ -116,6 +116,16 @@ impl Runtime {
         validate_name(&req.vm_id, "vm_id").map_err(|e| eg!(e))?;
         validate_name(&req.image, "image").map_err(|e| eg!(e))?;
 
+        if req.cpu == 0 {
+            return Err(eg!("cpu must be > 0"));
+        }
+        if req.mem == 0 {
+            return Err(eg!("mem must be > 0"));
+        }
+        if req.disk == 0 {
+            return Err(eg!("disk must be > 0"));
+        }
+
         if !self.resource.can_fit(req.cpu, req.mem, req.disk) {
             return Err(eg!("insufficient resources on host {}", self.host_id));
         }

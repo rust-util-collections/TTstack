@@ -171,6 +171,14 @@ pub async fn create_env(
         if let Err(e) = validate_name(&spec.image, "image") {
             return (StatusCode::BAD_REQUEST, Json(ApiResp::<EnvDetail>::err(e)));
         }
+        if spec.cpu == Some(0) || spec.mem == Some(0) || spec.disk == Some(0) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResp::<EnvDetail>::err(
+                    "cpu, mem, and disk must be > 0 if specified",
+                )),
+            );
+        }
     }
 
     // Validate & schedule under lock
