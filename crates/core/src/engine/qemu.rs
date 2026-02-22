@@ -37,9 +37,10 @@ impl QemuEngine {
                     .filter_map(|e| e.ok())
                     .filter(|e| e.path().is_file())
                     .collect();
-                if let Some(qcow2) = files.iter().find(|f| {
-                    f.path().extension().is_some_and(|ext| ext == "qcow2")
-                }) {
+                if let Some(qcow2) = files
+                    .iter()
+                    .find(|f| f.path().extension().is_some_and(|ext| ext == "qcow2"))
+                {
                     return qcow2.path().to_string_lossy().into_owned();
                 }
                 if files.len() == 1 {
@@ -61,10 +62,7 @@ impl QemuEngine {
             .args(["-name", &vm.id])
             .args(["-m", &format!("{}M", vm.mem)])
             .args(["-smp", &vm.cpu.to_string()])
-            .args([
-                "-drive",
-                &format!("file={disk},format=qcow2,if=virtio"),
-            ])
+            .args(["-drive", &format!("file={disk},format=qcow2,if=virtio")])
             .args([
                 "-netdev",
                 &format!("tap,id=net0,ifname={tap},script=no,downscript=no"),
@@ -177,18 +175,17 @@ impl VmEngine for QemuEngine {
             Ok(pid) if Self::process_alive(pid) => {
                 // Query QEMU monitor to distinguish Running vs Paused
                 let sock = self.monitor_path(vm);
-                if Path::new(&sock).exists() {
-                    if let Ok(output) = Command::new("sh")
+                if Path::new(&sock).exists()
+                    && let Ok(output) = Command::new("sh")
                         .args([
                             "-c",
                             &format!(r#"echo "info status" | socat - UNIX-CONNECT:{sock}"#),
                         ])
                         .output()
-                    {
-                        let body = String::from_utf8_lossy(&output.stdout);
-                        if body.contains("paused") {
-                            return Ok(VmState::Paused);
-                        }
+                {
+                    let body = String::from_utf8_lossy(&output.stdout);
+                    if body.contains("paused") {
+                        return Ok(VmState::Paused);
                     }
                 }
                 Ok(VmState::Running)

@@ -176,19 +176,14 @@ impl VmEngine for FirecrackerEngine {
             Ok(pid) if Path::new(&format!("/proc/{pid}")).exists() => {
                 // Query Firecracker API to distinguish Running vs Paused
                 let sock = Self::socket_path(vm);
-                if Path::new(&sock).exists() {
-                    if let Ok(output) = Command::new("curl")
-                        .args([
-                            "--unix-socket", &sock,
-                            "-s",
-                            "http://localhost/vm",
-                        ])
+                if Path::new(&sock).exists()
+                    && let Ok(output) = Command::new("curl")
+                        .args(["--unix-socket", &sock, "-s", "http://localhost/vm"])
                         .output()
-                    {
-                        let body = String::from_utf8_lossy(&output.stdout);
-                        if body.contains("\"Paused\"") {
-                            return Ok(VmState::Paused);
-                        }
+                {
+                    let body = String::from_utf8_lossy(&output.stdout);
+                    if body.contains("\"Paused\"") {
+                        return Ok(VmState::Paused);
                     }
                 }
                 Ok(VmState::Running)

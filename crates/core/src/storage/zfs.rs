@@ -21,10 +21,10 @@ impl ZfsStore {
         let check = Command::new("zfs")
             .args(["list", "-H", "-o", "name", path])
             .output();
-        if let Ok(ref out) = check {
-            if out.status.success() {
-                return Ok(String::from_utf8_lossy(&out.stdout).trim().to_string());
-            }
+        if let Ok(ref out) = check
+            && out.status.success()
+        {
+            return Ok(String::from_utf8_lossy(&out.stdout).trim().to_string());
         }
 
         // Strip leading '/' and try as dataset name
@@ -32,10 +32,10 @@ impl ZfsStore {
         let check = Command::new("zfs")
             .args(["list", "-H", "-o", "name", stripped])
             .output();
-        if let Ok(ref out) = check {
-            if out.status.success() {
-                return Ok(String::from_utf8_lossy(&out.stdout).trim().to_string());
-            }
+        if let Ok(ref out) = check
+            && out.status.success()
+        {
+            return Ok(String::from_utf8_lossy(&out.stdout).trim().to_string());
         }
 
         // Assume it's a filesystem path: strip leading '/' to form dataset name
@@ -123,9 +123,7 @@ impl ImageStore for ZfsStore {
         Ok(stdout
             .lines()
             .filter(|l| !l.is_empty() && *l != ds)
-            .map(|l| {
-                l.rsplit('/').next().unwrap_or(l).to_string()
-            })
+            .map(|l| l.rsplit('/').next().unwrap_or(l).to_string())
             .collect())
     }
 

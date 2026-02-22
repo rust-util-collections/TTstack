@@ -60,7 +60,10 @@ impl Runtime {
         let mut disk_used = 0u32;
         let mut vm_count = 0u32;
         for vm in &vms {
-            if vm.state == VmState::Running || vm.state == VmState::Paused || vm.state == VmState::Creating {
+            if vm.state == VmState::Running
+                || vm.state == VmState::Paused
+                || vm.state == VmState::Creating
+            {
                 cpu_used += vm.cpu;
                 mem_used += vm.mem;
                 disk_used += vm.disk;
@@ -281,10 +284,8 @@ impl Runtime {
         }
 
         // Only check/allocate resources when resuming from fully Stopped
-        if prev_state == VmState::Stopped {
-            if !self.resource.can_fit(vm.cpu, vm.mem, 0) {
-                return Err(eg!("insufficient resources to restart VM"));
-            }
+        if prev_state == VmState::Stopped && !self.resource.can_fit(vm.cpu, vm.mem, 0) {
+            return Err(eg!("insufficient resources to restart VM"));
         }
 
         let eng = engine::create_engine(vm.engine);
@@ -317,7 +318,10 @@ impl Runtime {
         let clone_path = format!("{}/clone-{}", self.runtime_dir, vm_id);
         let _ = self.store.remove_image(&clone_path);
 
-        if vm.state == VmState::Running || vm.state == VmState::Paused || vm.state == VmState::Creating {
+        if vm.state == VmState::Running
+            || vm.state == VmState::Paused
+            || vm.state == VmState::Creating
+        {
             self.resource.cpu_used = self.resource.cpu_used.saturating_sub(vm.cpu);
             self.resource.mem_used = self.resource.mem_used.saturating_sub(vm.mem);
         }
