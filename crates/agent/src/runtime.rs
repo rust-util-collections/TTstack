@@ -426,6 +426,53 @@ fn set_schema_version(db: &Connection, ver: u32) -> Result<()> {
     Ok(())
 }
 
+/// Load or generate a stable host_id persisted in the agent database.
+///
+/// If `--host-id` is provided on the CLI, that value takes precedence and
+/// is saved for future restarts. Otherwise we check the database; only
+/// when neither is available do we generate a new random ID.
+pub fn resolve_host_id(db_path: &str, cli_id: Option<String>) -> Result<String> {
+    let conn = Connection::open(db_path).c(d!("open DB for host_id"))?;
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS _meta (
+             key   TEXT PRIMARY KEY,
+             value TEXT NOT NULL
+         );",
+    )
+    .c(d!("ensure meta table"))?;
+
+    if let Some(id) = cli_id {
+        // CLI takes precedence — persist it
+        conn.execute(
+            "INSERT OR REPLACE INTO _meta (key, value) VALUES ('host_id', ?1)",
+            rusqlite::params![id],
+        )
+        .c(d!("persist CLI host_id"))?;
+        return Ok(id);
+    }
+
+    // Try to load from DB
+    let mut stmt = conn
+        .prepare("SELECT value FROM _meta WHERE key = 'host_id'")
+        .c(d!())?;
+    let mut rows = stmt.query([]).c(d!())?;
+    if let Some(row) = rows.next().c(d!())? {
+        let val: String = row.get(0).c(d!())?;
+        return Ok(val);
+    }
+    drop(rows);
+    drop(stmt);
+
+    // Generate and persist a new ID
+    let id = uuid::Uuid::new_v4().to_string()[..8].to_string();
+    conn.execute(
+        "INSERT OR REPLACE INTO _meta (key, value) VALUES ('host_id', ?1)",
+        rusqlite::params![id],
+    )
+    .c(d!("persist generated host_id"))?;
+    Ok(id)
+}
+
 fn save_vm(db: &Connection, vm: &Vm) -> Result<()> {
     let data = serde_json::to_string(vm).c(d!("serialize VM"))?;
     db.execute(

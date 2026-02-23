@@ -20,10 +20,16 @@ use ttcore::model::Resource;
 async fn main() {
     let cfg = Config::parse();
 
-    let host_id = cfg
-        .host_id
-        .clone()
-        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()[..8].to_string());
+    let db_path = format!("{}/agent.db", cfg.data_dir);
+    std::fs::create_dir_all(&cfg.data_dir).unwrap_or_else(|e| {
+        eprintln!("Failed to create data dir {}: {e}", cfg.data_dir);
+        std::process::exit(1);
+    });
+
+    let host_id = runtime::resolve_host_id(&db_path, cfg.host_id.clone()).unwrap_or_else(|e| {
+        eprintln!("Failed to resolve host_id: {e}");
+        std::process::exit(1);
+    });
 
     let resource = Resource {
         cpu_total: cfg.effective_cpu(),
@@ -31,12 +37,6 @@ async fn main() {
         disk_total: cfg.disk_total,
         ..Default::default()
     };
-
-    let db_path = format!("{}/agent.db", cfg.data_dir);
-    std::fs::create_dir_all(&cfg.data_dir).unwrap_or_else(|e| {
-        eprintln!("Failed to create data dir {}: {e}", cfg.data_dir);
-        std::process::exit(1);
-    });
 
     let rt = Runtime::new(
         host_id.clone(),
