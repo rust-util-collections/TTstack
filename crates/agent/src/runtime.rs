@@ -154,21 +154,19 @@ impl Runtime {
             }
         };
 
-        // Docker/Podman containers use registry images directly;
-        // other engines need a local filesystem image clone.
-        let uses_local_image = req.engine != Engine::Docker;
+        // Docker/Podman manages its own images, networking, and port mapping;
+        // other engines need local image clones, TAP devices, and nftables rules.
+        let host_managed_net = req.engine != Engine::Docker;
 
         let clone_path = format!("{}/clone-{}", self.runtime_dir, req.vm_id);
-        if uses_local_image {
+        if host_managed_net {
             let base_image = format!("{}/{}", self.image_dir, req.image);
             self.store
                 .clone_image(&base_image, &clone_path)
                 .c(d!("image clone"))?;
         }
 
-        // Docker/Podman manages its own networking;
-        // other engines need a TAP device on the host bridge.
-        if uses_local_image {
+        if host_managed_net {
             net::create_tap(&req.vm_id, &ip).c(d!("TAP setup"))?;
         }
 
@@ -203,7 +201,7 @@ impl Runtime {
         // Launch using the appropriate engine
         let eng = engine::create_engine(req.engine);
         if let Err(e) = eng.create(&vm, &clone_path) {
-            if uses_local_image {
+            if host_managed_net {
                 let _ = self.store.remove_image(&clone_path);
                 net::destroy_tap(&req.vm_id).unwrap_or(());
             }
@@ -211,28 +209,28 @@ impl Runtime {
             return Err(e).c(d!("engine create"));
         }
 
-        // Set up port forwarding and outgoing rules; rollback on failure
-        let post_create = || -> Result<()> {
-            for (&guest_port, &host_port) in &port_map {
-                net::add_port_forward(host_port, &ip, guest_port).c(d!("port forward"))?;
-            }
-            if req.deny_outgoing {
-                net::deny_outgoing(&ip).c(d!("deny outgoing"))?;
-            }
-            Ok(())
-        };
+        // Set up nftables port forwarding and outgoing rules for non-Docker engines.
+        // Docker handles port publishing via its own -p flag.
+        if host_managed_net {
+            let post_create = || -> Result<()> {
+                for (&guest_port, &host_port) in &port_map {
+                    net::add_port_forward(host_port, &ip, guest_port).c(d!("port forward"))?;
+                }
+                if req.deny_outgoing {
+                    net::deny_outgoing(&ip).c(d!("deny outgoing"))?;
+                }
+                Ok(())
+            };
 
-        if let Err(e) = post_create() {
-            // Rollback: undo partial network setup and destroy the VM
-            let _ = net::remove_port_forwards(&ip);
-            let _ = net::allow_outgoing(&ip);
-            let _ = eng.destroy(&vm);
-            if uses_local_image {
+            if let Err(e) = post_create() {
+                let _ = net::remove_port_forwards(&ip);
+                let _ = net::allow_outgoing(&ip);
+                let _ = eng.destroy(&vm);
                 let _ = self.store.remove_image(&clone_path);
                 let _ = net::destroy_tap(&req.vm_id);
+                let _ = delete_vm(&self.db, &vm.id);
+                return Err(e).c(d!("post-create setup"));
             }
-            let _ = delete_vm(&self.db, &vm.id);
-            return Err(e).c(d!("post-create setup"));
         }
 
         // Update resource tracking
@@ -311,12 +309,16 @@ impl Runtime {
         let eng = engine::create_engine(vm.engine);
         let _ = eng.destroy(&vm);
 
-        net::remove_port_forwards(&vm.ip).unwrap_or(());
-        net::allow_outgoing(&vm.ip).unwrap_or(());
-        net::destroy_tap(vm_id).unwrap_or(());
+        // Only clean up host-managed networking for non-Docker engines;
+        // Docker handles its own network teardown.
+        if vm.engine != Engine::Docker {
+            net::remove_port_forwards(&vm.ip).unwrap_or(());
+            net::allow_outgoing(&vm.ip).unwrap_or(());
+            net::destroy_tap(vm_id).unwrap_or(());
 
-        let clone_path = format!("{}/clone-{}", self.runtime_dir, vm_id);
-        let _ = self.store.remove_image(&clone_path);
+            let clone_path = format!("{}/clone-{}", self.runtime_dir, vm_id);
+            let _ = self.store.remove_image(&clone_path);
+        }
 
         if vm.state == VmState::Running
             || vm.state == VmState::Paused
