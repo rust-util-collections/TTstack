@@ -437,7 +437,10 @@ pub async fn stop_env(State(db): State<CtlState>, Path(id): Path<String>) -> imp
         if let Some(host) = hosts.iter().find(|h| h.id == vm.host_id) {
             let url = format!("http://{}/api/vms/{}/stop", host.addr, vm.id);
             match client.post(&url).send().await {
-                Ok(r) if !r.status().is_success() => {
+                Ok(r) if r.status().is_success() => {
+                    refresh_vm(&db, &client, host, &vm.id).await;
+                }
+                Ok(r) => {
                     eprintln!(
                         "[ctl] WARN: agent {} returned {} when stopping VM {}",
                         host.addr,
@@ -451,7 +454,6 @@ pub async fn stop_env(State(db): State<CtlState>, Path(id): Path<String>) -> imp
                         host.addr, vm.id
                     );
                 }
-                _ => {}
             }
         }
     }
@@ -486,7 +488,10 @@ pub async fn start_env(State(db): State<CtlState>, Path(id): Path<String>) -> im
         if let Some(host) = hosts.iter().find(|h| h.id == vm.host_id) {
             let url = format!("http://{}/api/vms/{}/start", host.addr, vm.id);
             match client.post(&url).send().await {
-                Ok(r) if !r.status().is_success() => {
+                Ok(r) if r.status().is_success() => {
+                    refresh_vm(&db, &client, host, &vm.id).await;
+                }
+                Ok(r) => {
                     eprintln!(
                         "[ctl] WARN: agent {} returned {} when starting VM {}",
                         host.addr,
@@ -500,7 +505,6 @@ pub async fn start_env(State(db): State<CtlState>, Path(id): Path<String>) -> im
                         host.addr, vm.id
                     );
                 }
-                _ => {}
             }
         }
     }
@@ -584,6 +588,18 @@ fn now() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+}
+
+/// Refresh a single VM's state from the agent and update the controller DB.
+async fn refresh_vm(state: &CtlState, client: &reqwest::Client, host: &Host, vm_id: &str) {
+    let url = format!("http://{}/api/vms/{}", host.addr, vm_id);
+    if let Ok(resp) = client.get(&url).send().await
+        && let Ok(body) = resp.json::<ApiResp<Vm>>().await
+        && let Some(vm) = body.data
+    {
+        let db = lock_db(state);
+        let _ = db.put_vm(&vm);
+    }
 }
 
 /// Refresh resource snapshots for all hosts from their agents.
