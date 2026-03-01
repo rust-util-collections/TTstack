@@ -219,6 +219,7 @@ pub async fn create_env(
     let created_at = now();
     let expires_at = req
         .lifetime
+        .filter(|&lt| lt > 0)
         .map(|lt| created_at + lt.min(MAX_LIFETIME))
         .unwrap_or(created_at + MAX_LIFETIME);
 

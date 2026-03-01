@@ -100,7 +100,7 @@ async fn expire_envs(state: &CtlState) {
         .as_secs();
 
     let expired = {
-        let db = state.lock().unwrap();
+        let db = state.lock().unwrap_or_else(|e| e.into_inner());
         db.list_envs()
             .unwrap_or_default()
             .into_iter()
@@ -115,7 +115,7 @@ async fn expire_envs(state: &CtlState) {
         eprintln!("expiring environment: {env_id}");
 
         let (vms, hosts) = {
-            let db = state.lock().unwrap();
+            let db = state.lock().unwrap_or_else(|e| e.into_inner());
             let vms = db.vms_by_env(&env_id).unwrap_or_default();
             let hosts = db.list_hosts().unwrap_or_default();
             (vms, hosts)
@@ -128,7 +128,7 @@ async fn expire_envs(state: &CtlState) {
             }
         }
 
-        let db = state.lock().unwrap();
+        let db = state.lock().unwrap_or_else(|e| e.into_inner());
         for vm in &vms {
             let _ = db.remove_vm(&vm.id);
         }
