@@ -11,4 +11,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 ruc = { workspace = true }
 uuid = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
 nix = { workspace = true }

@@ -3,6 +3,9 @@
 //! The agent runs on each physical host, managing local VMs/containers
 //! and exposing an HTTP API for the central controller.
 
+#[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+compile_error!("tt-agent only supports Linux and FreeBSD");
+
 mod config;
 mod handler;
 mod runtime;
