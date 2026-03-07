@@ -557,13 +557,7 @@ pub async fn deploy_local(role: &str, release_dir: &str) -> Result<()> {
                  --data-dir {home}/data --storage raw"
             );
             let env_path = format!("{prefix}/etc/tt-agent.env");
-            local_install_systemd(
-                "tt-agent",
-                &cmd,
-                true,
-                Some((&env_path, &env_content)),
-            )
-            .await?;
+            local_install_systemd("tt-agent", &cmd, true, Some((&env_path, &env_content))).await?;
             local_restart_service("tt-agent").await?;
         }
         _ => {}
@@ -579,12 +573,9 @@ pub async fn deploy_local(role: &str, release_dir: &str) -> Result<()> {
                 local_install_bin(&bin, prefix).await?;
             }
 
-            let cmd = format!(
-                "{prefix}/bin/tt-ctl --listen 0.0.0.0:9200 --data-dir {home}/ctl"
-            );
+            let cmd = format!("{prefix}/bin/tt-ctl --listen 0.0.0.0:9200 --data-dir {home}/ctl");
             let env_path = format!("{prefix}/etc/tt-ctl.env");
-            local_install_systemd("tt-ctl", &cmd, false, Some((&env_path, &env_content)))
-                .await?;
+            local_install_systemd("tt-ctl", &cmd, false, Some((&env_path, &env_content))).await?;
             local_restart_service("tt-ctl").await?;
 
             println!("[deploy] API key: {api_key}");

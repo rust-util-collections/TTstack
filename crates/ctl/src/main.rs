@@ -47,8 +47,7 @@ async fn main() {
     // Background task: periodic host health check
     let heartbeat_state = state.clone();
     tokio::spawn(async move {
-        let client =
-            handler::agent_client(heartbeat_state.api_key.as_deref(), 10);
+        let client = handler::agent_client(heartbeat_state.api_key.as_deref(), 10);
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(30)).await;
             handler::refresh_all_hosts(&heartbeat_state, &client).await;
