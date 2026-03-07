@@ -12,11 +12,14 @@ pub struct RawStore;
 
 impl ImageStore for RawStore {
     fn clone_image(&self, base: &str, target: &str) -> Result<()> {
-        // Use cp --reflink=auto to get CoW if the filesystem supports it
-        let output = std::process::Command::new("cp")
-            .args(["--reflink=auto", "-a", base, target])
-            .output()
-            .c(d!("cp image"))?;
+        // Use cp to copy the image; on Linux, --reflink=auto enables CoW
+        // if supported. On FreeBSD, use -a (archive mode) without GNU flags.
+        let mut cmd = std::process::Command::new("cp");
+        #[cfg(target_os = "linux")]
+        cmd.args(["--reflink=auto", "-a", base, target]);
+        #[cfg(not(target_os = "linux"))]
+        cmd.args(["-a", base, target]);
+        let output = cmd.output().c(d!("cp image"))?;
 
         if !output.status.success() {
             let err = String::from_utf8_lossy(&output.stderr);
