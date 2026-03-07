@@ -241,8 +241,18 @@ pub fn validate_name(name: &str, label: &str) -> std::result::Result<(), String>
     if name.len() > 128 {
         return Err(format!("{label} too long (max 128 chars)"));
     }
-    if name.contains("..") || name.contains('/') || name.contains('\0') {
-        return Err(format!("{label} contains invalid characters"));
+    // Only allow alphanumeric, hyphen, underscore, and dot.
+    // This prevents path traversal, shell injection, and filesystem issues.
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+    {
+        return Err(format!(
+            "{label} contains invalid characters (only a-z, A-Z, 0-9, '-', '_', '.' allowed)"
+        ));
+    }
+    if name.starts_with('.') || name.contains("..") {
+        return Err(format!("{label} must not start with '.' or contain '..'"));
     }
     Ok(())
 }
@@ -414,5 +424,13 @@ mod tests {
     #[test]
     fn validate_name_rejects_null() {
         assert!(validate_name("foo\0bar", "id").is_err());
+    }
+
+    #[test]
+    fn validate_name_rejects_spaces_and_special() {
+        assert!(validate_name("bad name", "env").is_err());
+        assert!(validate_name("bad!", "env").is_err());
+        assert!(validate_name("bad@name", "env").is_err());
+        assert!(validate_name(".hidden", "env").is_err());
     }
 }
