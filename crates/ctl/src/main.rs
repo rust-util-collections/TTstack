@@ -47,17 +47,8 @@ async fn main() {
     // Background task: periodic host health check
     let heartbeat_state = state.clone();
     tokio::spawn(async move {
-        let mut headers = reqwest::header::HeaderMap::new();
-        if let Some(key) = &heartbeat_state.api_key
-            && let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {key}"))
-        {
-            headers.insert(reqwest::header::AUTHORIZATION, val);
-        }
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
-            .default_headers(headers)
-            .build()
-            .unwrap();
+        let client =
+            handler::agent_client(heartbeat_state.api_key.as_deref(), 10);
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(30)).await;
             handler::refresh_all_hosts(&heartbeat_state, &client).await;
@@ -146,17 +137,7 @@ async fn expire_envs(state: &CtlState) {
             .collect::<Vec<_>>()
     };
 
-    let mut headers = reqwest::header::HeaderMap::new();
-    if let Some(key) = &state.api_key
-        && let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {key}"))
-    {
-        headers.insert(reqwest::header::AUTHORIZATION, val);
-    }
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .default_headers(headers)
-        .build()
-        .unwrap();
+    let client = handler::agent_client(state.api_key.as_deref(), 15);
 
     for env_id in expired {
         eprintln!("expiring environment: {env_id}");

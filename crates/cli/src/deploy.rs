@@ -186,11 +186,16 @@ impl SshTarget {
 
 // ── Service templates ───────────────────────────────────────────────
 
-fn systemd_unit(name: &str, exec_start: &str, run_as_root: bool) -> String {
+fn systemd_unit(name: &str, exec_start: &str, run_as_root: bool, env_file: Option<&str>) -> String {
     let user_lines = if run_as_root {
         "# Runs as root (needs NET_ADMIN for bridge/TAP/nftables)".to_string()
     } else {
         "User=ttstack\nGroup=ttstack".to_string()
+    };
+
+    let env_file_line = match env_file {
+        Some(path) => format!("EnvironmentFile={path}\n"),
+        None => String::new(),
     };
 
     format!(
@@ -201,7 +206,7 @@ After=network.target
 [Service]
 Type=simple
 {user_lines}
-ExecStart={exec_start}
+{env_file_line}ExecStart={exec_start}
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=65536
@@ -253,6 +258,7 @@ fn remote_setup_script(
     binaries: &[&str],
     extra_dirs: &[&str],
     host_label: &str,
+    env_file: Option<(&str, &str)>,
 ) -> String {
     let bin_copies: String = binaries
         .iter()
@@ -267,8 +273,30 @@ fn remote_setup_script(
         .collect::<Vec<_>>()
         .join(" ");
 
-    let systemd_unit_content = systemd_unit(service_name, exec_cmd, true);
+    let env_file_path = env_file.map(|(p, _)| p);
+    let systemd_unit_content = systemd_unit(service_name, exec_cmd, true, env_file_path);
     let openrc_initd_content = openrc_initd(service_name, exec_cmd);
+
+    // Shell snippet that writes the env file with 0600 permissions
+    let env_file_setup = match env_file {
+        Some((path, content)) => format!(
+            r#"
+# Write environment file (keeps secrets out of process args)
+sudo mkdir -p $(dirname {path})
+printf '%s' '{content}' | sudo tee {path} > /dev/null
+sudo chmod 600 {path}
+"#,
+            path = path,
+            content = content,
+        ),
+        None => String::new(),
+    };
+
+    // For OpenRC / manual fallback, source env file before exec
+    let env_source = match env_file {
+        Some((path, _)) => format!(". {path} && export TT_API_KEY && "),
+        None => String::new(),
+    };
 
     format!(
         r#"#!/bin/sh
@@ -287,14 +315,14 @@ else
 fi
 
 # Create directories
-sudo mkdir -p {prefix}/bin {dir_list}
+sudo mkdir -p {prefix}/bin {prefix}/etc {dir_list}
 
 # Install binaries
 {bin_copies}
 
 # Set ownership
 sudo chown -R {user}:{user} {home} 2>/dev/null || true
-
+{env_file_setup}
 # Detect init system and install service
 if command -v systemctl >/dev/null 2>&1 && [ -d /etc/systemd/system ]; then
     echo "[deploy] using systemd"
@@ -320,7 +348,7 @@ else
     echo "[deploy] WARNING: no known init system; starting {service_name} manually"
     sudo pkill -f '{prefix}/bin/{service_name}' 2>/dev/null || true
     sleep 1
-    sudo nohup {exec_cmd} > /var/log/{service_name}.log 2>&1 &
+    sudo nohup sh -c '{env_source}{exec_cmd}' > /var/log/{service_name}.log 2>&1 &
     sleep 2
     pgrep -f '{prefix}/bin/{service_name}' && echo "[deploy] {service_name} started (manual)"
 fi
@@ -340,6 +368,8 @@ echo "[deploy] {service_name} deployed on {host_label}"
         systemd_unit = systemd_unit_content,
         openrc_initd = openrc_initd_content,
         host_label = host_label,
+        env_file_setup = env_file_setup,
+        env_source = env_source,
     )
 }
 
@@ -410,8 +440,32 @@ async fn local_install_bin(src: &Path, prefix: &str) -> Result<()> {
     Ok(())
 }
 
-async fn local_install_systemd(name: &str, exec_start: &str, run_as_root: bool) -> Result<()> {
-    let unit = systemd_unit(name, exec_start, run_as_root);
+async fn local_install_systemd(
+    name: &str,
+    exec_start: &str,
+    run_as_root: bool,
+    env_file: Option<(&str, &str)>,
+) -> Result<()> {
+    // Write optional environment file with restricted permissions
+    if let Some((path, content)) = env_file {
+        if let Some(parent) = std::path::Path::new(path).parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .c(d!("create env dir"))?;
+        }
+        tokio::fs::write(path, content)
+            .await
+            .c(d!("write env file"))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let perms = std::fs::Permissions::from_mode(0o600);
+            let _ = std::fs::set_permissions(path, perms);
+        }
+    }
+
+    let env_path = env_file.map(|(p, _)| p);
+    let unit = systemd_unit(name, exec_start, run_as_root, env_path);
     let path = format!("/etc/systemd/system/{name}.service");
     tokio::fs::write(&path, &unit).await.c(d!("write unit"))?;
 
@@ -484,6 +538,7 @@ pub async fn deploy_local(role: &str, release_dir: &str) -> Result<()> {
 
     let release = PathBuf::from(release_dir);
     let api_key = generate_api_key();
+    let env_content = format!("TT_API_KEY={api_key}\n");
 
     match role {
         "agent" | "all" => {
@@ -499,9 +554,16 @@ pub async fn deploy_local(role: &str, release_dir: &str) -> Result<()> {
             let cmd = format!(
                 "{prefix}/bin/tt-agent --listen 0.0.0.0:9100 \
                  --image-dir {home}/images --runtime-dir {home}/runtime \
-                 --data-dir {home}/data --storage raw --api-key {api_key}"
+                 --data-dir {home}/data --storage raw"
             );
-            local_install_systemd("tt-agent", &cmd, true).await?;
+            let env_path = format!("{prefix}/etc/tt-agent.env");
+            local_install_systemd(
+                "tt-agent",
+                &cmd,
+                true,
+                Some((&env_path, &env_content)),
+            )
+            .await?;
             local_restart_service("tt-agent").await?;
         }
         _ => {}
@@ -518,13 +580,15 @@ pub async fn deploy_local(role: &str, release_dir: &str) -> Result<()> {
             }
 
             let cmd = format!(
-                "{prefix}/bin/tt-ctl --listen 0.0.0.0:9200 --data-dir {home}/ctl --api-key {api_key}"
+                "{prefix}/bin/tt-ctl --listen 0.0.0.0:9200 --data-dir {home}/ctl"
             );
-            local_install_systemd("tt-ctl", &cmd, false).await?;
+            let env_path = format!("{prefix}/etc/tt-ctl.env");
+            local_install_systemd("tt-ctl", &cmd, false, Some((&env_path, &env_content)))
+                .await?;
             local_restart_service("tt-ctl").await?;
 
             println!("[deploy] API key: {api_key}");
-            println!("[deploy] Run: tt config 127.0.0.1:9200 -k {api_key}");
+            println!("[deploy] Run: tt config 127.0.0.1:9200 --api-key {api_key}");
         }
         _ => {}
     }
@@ -556,6 +620,7 @@ pub async fn deploy_distributed(config_path: &str) -> Result<()> {
     }
 
     let api_key = cfg.general.api_key.clone().unwrap_or_else(generate_api_key);
+    let env_content = format!("TT_API_KEY={api_key}\n");
 
     // Deploy controller
     if let Some(ctl) = &cfg.controller {
@@ -581,9 +646,10 @@ pub async fn deploy_distributed(config_path: &str) -> Result<()> {
             .clone()
             .unwrap_or_else(|| format!("{home}/ctl"));
         let exec_cmd = format!(
-            "{prefix}/bin/tt-ctl --listen {listen} --data-dir {data_dir} --api-key {api_key}",
+            "{prefix}/bin/tt-ctl --listen {listen} --data-dir {data_dir}",
             listen = ctl.listen,
         );
+        let env_path = format!("{prefix}/etc/tt-ctl.env");
 
         let script = remote_setup_script(
             "tt-ctl",
@@ -595,6 +661,7 @@ pub async fn deploy_distributed(config_path: &str) -> Result<()> {
             &["tt-ctl", "tt"],
             &[format!("{home}/ctl").as_str()],
             &ctl.host,
+            Some((&env_path, &env_content)),
         );
         let out = target.exec(&script).await?;
         print!("{out}");
@@ -645,7 +712,7 @@ pub async fn deploy_distributed(config_path: &str) -> Result<()> {
         if let Some(hid) = &agent.host_id {
             exec_cmd.push_str(&format!(" --host-id {hid}"));
         }
-        exec_cmd.push_str(&format!(" --api-key {api_key}"));
+        let env_path = format!("{prefix}/etc/tt-agent.env");
 
         let script = remote_setup_script(
             "tt-agent",
@@ -657,6 +724,7 @@ pub async fn deploy_distributed(config_path: &str) -> Result<()> {
             &["tt-agent"],
             &[image_dir.as_str(), runtime_dir.as_str()],
             &agent.host,
+            Some((&env_path, &env_content)),
         );
         let out = target.exec(&script).await?;
         print!("{out}");
@@ -666,7 +734,7 @@ pub async fn deploy_distributed(config_path: &str) -> Result<()> {
     println!("[deploy] API key: {api_key}");
     if let Some(ctl) = &cfg.controller {
         println!(
-            "[deploy] Run: tt config {}:{} -k {api_key}",
+            "[deploy] Run: tt config {}:{} --api-key {api_key}",
             ctl.host,
             ctl.listen.rsplit(':').next().unwrap_or("9200")
         );
@@ -752,9 +820,13 @@ host = "10.0.0.3"
             &["tt-agent"],
             &["/home/ttstack/images"],
             "testhost",
+            Some(("/opt/tt/etc/tt-agent.env", "TT_API_KEY=test-key\n")),
         );
         assert!(script.contains("sudo"));
         assert!(script.contains("rc-service") || script.contains("systemctl"));
         assert!(script.contains("adduser") || script.contains("useradd"));
+        assert!(script.contains("EnvironmentFile=/opt/tt/etc/tt-agent.env"));
+        assert!(script.contains("TT_API_KEY=test-key"));
+        assert!(!script.contains("--api-key"));
     }
 }

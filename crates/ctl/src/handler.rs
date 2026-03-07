@@ -39,9 +39,10 @@ impl CtlShared {
 
 pub type CtlState = Arc<CtlShared>;
 
-/// HTTP client for agent communication, with optional Bearer auth.
-fn agent_client(api_key: Option<&str>) -> reqwest::Client {
-    let mut builder = reqwest::Client::builder().timeout(std::time::Duration::from_secs(30));
+/// Build an HTTP client for agent communication, with optional Bearer auth.
+pub fn agent_client(api_key: Option<&str>, timeout_secs: u64) -> reqwest::Client {
+    let mut builder =
+        reqwest::Client::builder().timeout(std::time::Duration::from_secs(timeout_secs));
     if let Some(key) = api_key {
         let mut headers = reqwest::header::HeaderMap::new();
         if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {key}")) {
@@ -59,7 +60,7 @@ pub async fn register_host(
     State(db): State<CtlState>,
     Json(req): Json<RegisterHostReq>,
 ) -> impl IntoResponse {
-    let client = agent_client(db.api_key.as_deref());
+    let client = agent_client(db.api_key.as_deref(), 30);
     let url = format!("http://{}/api/info", req.addr);
 
     let resp = match client.get(&url).send().await {
@@ -245,7 +246,7 @@ pub async fn create_env(
     };
 
     // Fetch available images from all online hosts for scheduling validation
-    let client = agent_client(db.api_key.as_deref());
+    let client = agent_client(db.api_key.as_deref(), 30);
     let host_images = fetch_host_images(&hosts, &client).await;
 
     let placements = match scheduler::schedule_env(&hosts, &req.vms, &host_images) {
@@ -428,7 +429,7 @@ pub async fn delete_env(State(db): State<CtlState>, Path(id): Path<String>) -> i
         (vms, hosts)
     };
 
-    let client = agent_client(db.api_key.as_deref());
+    let client = agent_client(db.api_key.as_deref(), 30);
     for vm in &vms {
         if let Some(host) = hosts.iter().find(|h| h.id == vm.host_id) {
             let url = format!("http://{}/api/vms/{}", host.addr, vm.id);
@@ -481,7 +482,7 @@ pub async fn stop_env(State(db): State<CtlState>, Path(id): Path<String>) -> imp
         (env, vms, hosts)
     };
 
-    let client = agent_client(db.api_key.as_deref());
+    let client = agent_client(db.api_key.as_deref(), 30);
     for vm in &vms {
         if let Some(host) = hosts.iter().find(|h| h.id == vm.host_id) {
             let url = format!("http://{}/api/vms/{}/stop", host.addr, vm.id);
@@ -532,7 +533,7 @@ pub async fn start_env(State(db): State<CtlState>, Path(id): Path<String>) -> im
         (env, vms, hosts)
     };
 
-    let client = agent_client(db.api_key.as_deref());
+    let client = agent_client(db.api_key.as_deref(), 30);
     for vm in &vms {
         if let Some(host) = hosts.iter().find(|h| h.id == vm.host_id) {
             let url = format!("http://{}/api/vms/{}/start", host.addr, vm.id);
@@ -574,7 +575,7 @@ pub async fn list_images(State(db): State<CtlState>) -> impl IntoResponse {
         db.list_hosts().unwrap_or_default()
     };
 
-    let client = agent_client(db.api_key.as_deref());
+    let client = agent_client(db.api_key.as_deref(), 30);
     let mut images = Vec::new();
 
     for host in &hosts {
@@ -602,7 +603,7 @@ pub async fn list_images(State(db): State<CtlState>) -> impl IntoResponse {
 
 /// GET /api/status
 pub async fn fleet_status(State(db): State<CtlState>) -> impl IntoResponse {
-    let client = agent_client(db.api_key.as_deref());
+    let client = agent_client(db.api_key.as_deref(), 30);
     refresh_all_hosts(&db, &client).await;
 
     let db = db.lock_db();
