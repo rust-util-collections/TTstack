@@ -6,6 +6,7 @@
 use super::VmEngine;
 use crate::model::{Vm, VmState};
 use ruc::*;
+use std::path::Path;
 use std::process::Command;
 
 pub struct JailEngine;
@@ -31,11 +32,16 @@ impl VmEngine for JailEngine {
     fn create(&self, vm: &Vm, image_path: &str) -> Result<()> {
         let name = Self::jail_name(vm);
 
+        // jail requires an absolute path for mount.devfs
+        let abs_path = Path::new(image_path)
+            .canonicalize()
+            .c(d!("canonicalize jail path"))?;
+
         // Create the jail with the given root filesystem
         let output = Command::new("jail")
             .args(["-c"])
             .arg(format!("name={name}"))
-            .arg(format!("path={image_path}"))
+            .arg(format!("path={}", abs_path.display()))
             .arg("host.hostname=ttstack")
             .arg(format!("ip4.addr={}", vm.ip))
             .arg("persist")
