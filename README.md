@@ -74,7 +74,7 @@ Directory layout after deploy:
 ### 2. Register hosts and create environments
 
 ```bash
-tt config 10.0.0.1:9200             # point CLI to controller
+tt config 10.0.0.1:9200 -k <api-key> # point CLI to controller (key from deploy output)
 tt host add 10.0.0.2:9100           # register host
 
 tt env create my-test \
@@ -98,7 +98,7 @@ Open `http://<controller-addr>:9200` in a browser.
 ## CLI Reference
 
 ```
-tt config <addr>                    Set controller address
+tt config <addr> [-k <api-key>]     Set controller address and API key
 tt status                           Fleet-wide status
 
 tt host add <agent-addr>            Register a host
@@ -217,7 +217,12 @@ tt-ctl [OPTIONS]
 
   --listen <ADDR>       Listen address              [0.0.0.0:9200]
   --data-dir <PATH>     Database directory            [/home/ttstack/ctl]
+  --api-key <KEY>       API key for auth (env: TT_API_KEY)  [none]
 ```
+
+When `--api-key` is set, all `/api/*` requests must include
+`Authorization: Bearer <key>`. The web dashboard (`/`) remains open.
+Deploy auto-generates a key if not specified in `deploy.toml`.
 
 ## REST API
 
@@ -268,6 +273,9 @@ Deployment is built into the `tt` CLI binary — no external scripts needed.
 Edit `deploy.toml` (see `tools/deploy.toml.example`):
 
 ```toml
+[general]
+# api_key = "my-secret"  # optional; auto-generated if omitted
+
 [controller]
 host = "10.0.0.1"
 
@@ -295,7 +303,6 @@ TTstack/
 ├── Cargo.toml              Workspace
 ├── Makefile                Build + deploy targets
 ├── tools/
-│   ├── deploy.sh           Idempotent deploy script (local + SSH)
 │   └── deploy.toml.example Fleet configuration template
 └── crates/
     ├── core/               Shared library (ttcore)

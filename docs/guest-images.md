@@ -5,17 +5,21 @@ This guide covers how to create, manage, and deploy guest images for each engine
 
 ## Quick Start
 
-Use the automated script:
+Use the built-in image recipes:
 
 ```bash
-# Firecracker microVM image (vmlinux + rootfs)
-sudo ./tools/create-images.sh firecracker fc-alpine /home/ttstack/images
+# List available recipes
+tt image recipes
 
-# QEMU/KVM disk image (qcow2)
-sudo ./tools/create-images.sh qemu qemu-test /home/ttstack/images
+# Create all images for this platform
+sudo tt image create all --image-dir /home/ttstack/images
 
-# Docker container image (built locally)
-./tools/create-images.sh docker tt-test-alpine
+# Create all Docker images
+sudo tt image create all --engine docker
+
+# Create a specific image
+sudo tt image create fc-alpine --image-dir /home/ttstack/images
+sudo tt image create alpine-cloud --image-dir /home/ttstack/images
 ```
 
 ## Image Formats by Engine
