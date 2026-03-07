@@ -8,6 +8,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard};
 use ttcore::api::*;
 use ttcore::model::*;
@@ -181,7 +182,7 @@ pub async fn create_env(
         }
     }
 
-    // Validate & schedule under lock
+    // Reserve the environment name under lock to prevent races
     let hosts = {
         let db = lock_db(&db);
 
@@ -195,9 +196,27 @@ pub async fn create_env(
             );
         }
 
+        // Insert a placeholder env to reserve the name while we create VMs.
+        // This prevents concurrent requests from creating the same env.
+        let placeholder = Env {
+            id: req.id.clone(),
+            owner: req.owner.clone(),
+            vm_ids: vec![],
+            created_at: now(),
+            expires_at: 0,
+            state: EnvState::Active,
+        };
+        if let Err(e) = db.put_env(&placeholder) {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResp::<EnvDetail>::err(e.to_string())),
+            );
+        }
+
         match db.list_hosts() {
             Ok(h) => h,
             Err(e) => {
+                let _ = db.remove_env(&req.id);
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(ApiResp::<EnvDetail>::err(e.to_string())),
@@ -206,9 +225,16 @@ pub async fn create_env(
         }
     };
 
-    let placements = match scheduler::schedule_env(&hosts, &req.vms) {
+    // Fetch available images from all online hosts for scheduling validation
+    let client = agent_client();
+    let host_images = fetch_host_images(&hosts, &client).await;
+
+    let placements = match scheduler::schedule_env(&hosts, &req.vms, &host_images) {
         Ok(p) => p,
         Err(e) => {
+            // Clean up the placeholder
+            let db = lock_db(&db);
+            let _ = db.remove_env(&req.id);
             return (
                 StatusCode::UNPROCESSABLE_ENTITY,
                 Json(ApiResp::<EnvDetail>::err(e.to_string())),
@@ -223,7 +249,6 @@ pub async fn create_env(
         .map(|lt| created_at + lt.min(MAX_LIFETIME))
         .unwrap_or(created_at + MAX_LIFETIME);
 
-    let client = agent_client();
     let mut vm_ids = Vec::new();
     let mut created_vms = Vec::new();
     let mut warnings = Vec::new();
@@ -283,6 +308,9 @@ pub async fn create_env(
     }
 
     if created_vms.is_empty() && !req.vms.is_empty() {
+        // Clean up the placeholder
+        let db = lock_db(&db);
+        let _ = db.remove_env(&req.id);
         return (
             StatusCode::BAD_GATEWAY,
             Json(ApiResp::<EnvDetail>::err(
@@ -291,6 +319,7 @@ pub async fn create_env(
         );
     }
 
+    // Update the placeholder with the real environment data
     let env = Env {
         id: req.id.clone(),
         owner: req.owner.clone(),
@@ -591,6 +620,27 @@ fn now() -> u64 {
         .as_secs()
 }
 
+/// Fetch available images from all online hosts.
+async fn fetch_host_images(
+    hosts: &[Host],
+    client: &reqwest::Client,
+) -> HashMap<String, HashSet<String>> {
+    let mut result = HashMap::new();
+    for host in hosts {
+        if host.state != HostState::Online {
+            continue;
+        }
+        let url = format!("http://{}/api/images", host.addr);
+        if let Ok(resp) = client.get(&url).send().await
+            && let Ok(body) = resp.json::<ApiResp<Vec<String>>>().await
+            && let Some(names) = body.data
+        {
+            result.insert(host.id.clone(), names.into_iter().collect());
+        }
+    }
+    result
+}
+
 /// Refresh a single VM's state from the agent and update the controller DB.
 async fn refresh_vm(state: &CtlState, client: &reqwest::Client, host: &Host, vm_id: &str) {
     let url = format!("http://{}/api/vms/{}", host.addr, vm_id);
@@ -604,7 +654,7 @@ async fn refresh_vm(state: &CtlState, client: &reqwest::Client, host: &Host, vm_
 }
 
 /// Refresh resource snapshots for all hosts from their agents.
-async fn refresh_all_hosts(state: &CtlState, client: &reqwest::Client) {
+pub async fn refresh_all_hosts(state: &CtlState, client: &reqwest::Client) {
     let hosts = {
         let db = lock_db(state);
         db.list_hosts().unwrap_or_default()

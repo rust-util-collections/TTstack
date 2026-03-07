@@ -103,10 +103,11 @@ mod platform {
             "add chain ip {NFT_TABLE} postrouting {{ type nat hook postrouting priority 100; policy accept; }}"
         ))?;
 
-        // Flush postrouting before re-adding the masquerade rule to avoid
-        // duplicate rules on agent restart. Do NOT flush prerouting since
-        // per-VM port forwards are restored separately.
+        // Flush both chains on startup to avoid duplicate/stale rules.
+        // Per-VM port forwards in prerouting will be restored from the
+        // database by the agent's recovery loop.
         let _ = nft(&format!("flush chain ip {NFT_TABLE} postrouting"));
+        let _ = nft(&format!("flush chain ip {NFT_TABLE} prerouting"));
 
         nft(&format!(
             "add rule ip {NFT_TABLE} postrouting ip saddr 10.10.0.0/16 masquerade"
@@ -280,9 +281,34 @@ mod platform {
         Ok(())
     }
 
-    pub fn remove_port_forwards(_vm_ip_addr: &str) -> Result<()> {
-        // Flush the ttstack anchor
-        let _ = run(&["pfctl", "-a", "ttstack", "-F", "all"]);
+    pub fn remove_port_forwards(vm_ip_addr: &str) -> Result<()> {
+        // List current rules and remove only those matching this VM's IP
+        let output = Command::new("pfctl")
+            .args(["-a", "ttstack", "-s", "rules"])
+            .output();
+
+        if let Ok(output) = output {
+            let rules = String::from_utf8_lossy(&output.stdout);
+            let remaining: Vec<&str> = rules
+                .lines()
+                .filter(|line| !line.contains(vm_ip_addr))
+                .collect();
+
+            if remaining.is_empty() {
+                // No rules left — flush the anchor
+                let _ = run(&["pfctl", "-a", "ttstack", "-F", "rules"]);
+            } else {
+                // Reload only the remaining rules
+                let new_rules = remaining.join("\n");
+                let _ = Command::new("sh")
+                    .args([
+                        "-c",
+                        &format!(r#"echo '{}' | pfctl -a ttstack -f -"#, new_rules),
+                    ])
+                    .output();
+            }
+        }
+
         Ok(())
     }
 
@@ -303,8 +329,32 @@ mod platform {
         Ok(())
     }
 
-    pub fn allow_outgoing(_vm_ip_addr: &str) -> Result<()> {
-        let _ = run(&["pfctl", "-a", "ttstack/deny", "-F", "all"]);
+    pub fn allow_outgoing(vm_ip_addr: &str) -> Result<()> {
+        // List current deny rules and remove only those matching this VM's IP
+        let output = Command::new("pfctl")
+            .args(["-a", "ttstack/deny", "-s", "rules"])
+            .output();
+
+        if let Ok(output) = output {
+            let rules = String::from_utf8_lossy(&output.stdout);
+            let remaining: Vec<&str> = rules
+                .lines()
+                .filter(|line| !line.contains(vm_ip_addr))
+                .collect();
+
+            if remaining.is_empty() {
+                let _ = run(&["pfctl", "-a", "ttstack/deny", "-F", "rules"]);
+            } else {
+                let new_rules = remaining.join("\n");
+                let _ = Command::new("sh")
+                    .args([
+                        "-c",
+                        &format!(r#"echo '{}' | pfctl -a ttstack/deny -f -"#, new_rules),
+                    ])
+                    .output();
+            }
+        }
+
         Ok(())
     }
 

@@ -78,6 +78,16 @@ impl VmEngine for BhyveEngine {
     }
 
     fn stop(&self, vm: &Vm) -> Result<()> {
+        // Kill the bhyve process first, then clean up the VM device
+        if let Some(pid) = Self::read_pid(vm) {
+            let _ = nix::sys::signal::kill(
+                nix::unistd::Pid::from_raw(pid),
+                nix::sys::signal::Signal::SIGTERM,
+            );
+            // Give it a moment to exit gracefully
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+
         let output = Command::new("bhyvectl")
             .args(["--destroy", "--vm", &vm.id])
             .output()
@@ -85,7 +95,8 @@ impl VmEngine for BhyveEngine {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(eg!("bhyvectl failed: {}", stderr));
+            // Not fatal — the VM device may already be gone
+            eprintln!("[bhyve] WARN: bhyvectl --destroy failed for {}: {}", vm.id, stderr);
         }
 
         Ok(())

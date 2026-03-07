@@ -94,7 +94,7 @@ Firecracker images are **directories** containing two files:
 **Important notes:**
 - The kernel MUST have `virtio_mmio` built-in (not as a module)
 - The stock Debian/Ubuntu kernel will NOT work — use the Firecracker pre-built kernel
-- Boot args include `root=/dev/vda` — the rootfs appears as `/dev/vda`
+- Boot args: `console=ttyS0 reboot=k panic=1 pci=off`; the rootfs is set via `is_root_device: true`
 - Firecracker VMs use TAP devices on the `tt0` bridge for networking
 - Pause/resume is supported via the Firecracker API
 
@@ -240,7 +240,7 @@ qemu-system-x86_64 -enable-kvm -m 8192 -smp 4 \
   -cdrom /tmp/mfsbsd.iso -boot d \
   -netdev user,id=net0,hostfwd=tcp::2222-:22 \
   -device virtio-net-pci,netdev=net0 \
-  -display none -daemonize
+  -vnc none -daemonize
 
 # SSH in (default root password: mfsroot)
 sshpass -p 'mfsroot' ssh -p 2222 root@127.0.0.1

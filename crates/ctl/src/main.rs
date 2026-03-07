@@ -43,6 +43,19 @@ async fn main() {
         }
     });
 
+    // Background task: periodic host health check
+    let heartbeat_state = state.clone();
+    tokio::spawn(async move {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .unwrap();
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+            handler::refresh_all_hosts(&heartbeat_state, &client).await;
+        }
+    });
+
     let app = Router::new()
         // Web dashboard
         .route("/", get(web::index))
@@ -92,6 +105,9 @@ async fn shutdown_signal() {
     eprintln!("received shutdown signal");
 }
 
+/// Maximum retries when contacting an agent during expiry cleanup.
+const EXPIRY_RETRIES: u32 = 2;
+
 /// Periodically destroy expired environments.
 async fn expire_envs(state: &CtlState) {
     let now = std::time::SystemTime::now()
@@ -109,7 +125,10 @@ async fn expire_envs(state: &CtlState) {
             .collect::<Vec<_>>()
     };
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .unwrap();
 
     for env_id in expired {
         eprintln!("expiring environment: {env_id}");
@@ -124,7 +143,46 @@ async fn expire_envs(state: &CtlState) {
         for vm in &vms {
             if let Some(host) = hosts.iter().find(|h| h.id == vm.host_id) {
                 let url = format!("http://{}/api/vms/{}", host.addr, vm.id);
-                let _ = client.delete(&url).send().await;
+                let mut ok = false;
+                for attempt in 0..=EXPIRY_RETRIES {
+                    match client.delete(&url).send().await {
+                        Ok(r) if r.status().is_success() => {
+                            ok = true;
+                            break;
+                        }
+                        Ok(r) => {
+                            eprintln!(
+                                "[ctl] WARN: agent {} returned {} deleting VM {} (attempt {}/{})",
+                                host.addr,
+                                r.status(),
+                                vm.id,
+                                attempt + 1,
+                                EXPIRY_RETRIES + 1
+                            );
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "[ctl] WARN: failed to reach {} to delete VM {} (attempt {}/{}): {e}",
+                                host.addr,
+                                vm.id,
+                                attempt + 1,
+                                EXPIRY_RETRIES + 1
+                            );
+                        }
+                    }
+                    if attempt < EXPIRY_RETRIES {
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    }
+                }
+                if !ok {
+                    eprintln!(
+                        "[ctl] ERROR: could not delete VM {} on host {} after {} attempts; \
+                         VM may be orphaned",
+                        vm.id,
+                        host.addr,
+                        EXPIRY_RETRIES + 1
+                    );
+                }
             }
         }
 

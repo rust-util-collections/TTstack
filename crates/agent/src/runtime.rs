@@ -49,6 +49,28 @@ impl Runtime {
         // Restore state from database
         let vms = load_all_vms(&db)?;
 
+        // Clean up VMs stuck in "Creating" state (agent crashed mid-creation).
+        // These VMs may have partial resources allocated that need cleanup.
+        for vm in &vms {
+            if vm.state == VmState::Creating {
+                eprintln!(
+                    "[agent] cleaning up orphaned VM {} (stuck in Creating state)",
+                    vm.id
+                );
+                let eng = engine::create_engine(vm.engine);
+                let _ = eng.destroy(vm);
+                if vm.engine != Engine::Docker {
+                    let _ = storage::create_store(storage)
+                        .remove_image(&format!("{}/clone-{}", runtime_dir, vm.id));
+                    net::destroy_tap(&vm.id).unwrap_or(());
+                }
+                let _ = delete_vm(&db, &vm.id);
+            }
+        }
+
+        // Reload after cleanup
+        let vms = load_all_vms(&db)?;
+
         let max_idx = vms
             .iter()
             .filter_map(|vm| ip_to_index(&vm.ip))
@@ -60,10 +82,7 @@ impl Runtime {
         let mut disk_used = 0u32;
         let mut vm_count = 0u32;
         for vm in &vms {
-            if vm.state == VmState::Running
-                || vm.state == VmState::Paused
-                || vm.state == VmState::Creating
-            {
+            if vm.state == VmState::Running || vm.state == VmState::Paused {
                 cpu_used += vm.cpu;
                 mem_used += vm.mem;
                 disk_used += vm.disk;
