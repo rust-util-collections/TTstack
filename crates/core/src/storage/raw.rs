@@ -65,3 +65,89 @@ impl ImageStore for RawStore {
         "raw"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clone_and_remove_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path().join("base.img");
+        let clone = dir.path().join("clone.img");
+        std::fs::write(&base, b"image-data").unwrap();
+
+        let store = RawStore;
+        store.clone_image(base.to_str().unwrap(), clone.to_str().unwrap()).unwrap();
+        assert!(clone.exists());
+        assert_eq!(std::fs::read(&clone).unwrap(), b"image-data");
+
+        store.remove_image(clone.to_str().unwrap()).unwrap();
+        assert!(!clone.exists());
+    }
+
+    #[test]
+    fn clone_and_remove_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let base_dir = dir.path().join("base");
+        let clone_dir = dir.path().join("clone");
+        std::fs::create_dir(&base_dir).unwrap();
+        std::fs::write(base_dir.join("disk.qcow2"), b"data").unwrap();
+
+        let store = RawStore;
+        store.clone_image(base_dir.to_str().unwrap(), clone_dir.to_str().unwrap()).unwrap();
+        assert!(clone_dir.join("disk.qcow2").exists());
+
+        store.remove_image(clone_dir.to_str().unwrap()).unwrap();
+        assert!(!clone_dir.exists());
+    }
+
+    #[test]
+    fn list_images_filters_clones_and_hidden() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("ubuntu"), b"").unwrap();
+        std::fs::write(dir.path().join("alpine"), b"").unwrap();
+        std::fs::write(dir.path().join(".hidden"), b"").unwrap();
+        std::fs::write(dir.path().join("clone-abc"), b"").unwrap();
+
+        let store = RawStore;
+        let images = store.list_images(dir.path().to_str().unwrap()).unwrap();
+        assert_eq!(images, vec!["alpine", "ubuntu"]);
+    }
+
+    #[test]
+    fn list_images_empty_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RawStore;
+        let images = store.list_images(dir.path().to_str().unwrap()).unwrap();
+        assert!(images.is_empty());
+    }
+
+    #[test]
+    fn list_images_nonexistent_dir() {
+        let store = RawStore;
+        let images = store.list_images("/no/such/path").unwrap();
+        assert!(images.is_empty());
+    }
+
+    #[test]
+    fn image_exists_check() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("img");
+        let store = RawStore;
+        assert!(!store.image_exists(path.to_str().unwrap()).unwrap());
+        std::fs::write(&path, b"").unwrap();
+        assert!(store.image_exists(path.to_str().unwrap()).unwrap());
+    }
+
+    #[test]
+    fn remove_nonexistent_is_ok() {
+        let store = RawStore;
+        store.remove_image("/no/such/file").unwrap();
+    }
+
+    #[test]
+    fn name_is_raw() {
+        assert_eq!(RawStore.name(), "raw");
+    }
+}

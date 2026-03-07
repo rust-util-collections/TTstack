@@ -42,3 +42,15 @@ pub fn create_store(kind: Storage) -> Box<dyn ImageStore> {
         Storage::Raw => Box::new(raw::RawStore),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn create_store_names() {
+        assert_eq!(create_store(Storage::Raw).name(), "raw");
+        assert_eq!(create_store(Storage::Zfs).name(), "zfs");
+        assert_eq!(create_store(Storage::Btrfs).name(), "btrfs");
+    }
+}

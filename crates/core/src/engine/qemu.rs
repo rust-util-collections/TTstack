@@ -198,3 +198,51 @@ impl VmEngine for QemuEngine {
         "qemu"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_disk_plain_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("image.qcow2");
+        std::fs::write(&file, b"fake").unwrap();
+        let resolved = QemuEngine::resolve_disk(file.to_str().unwrap());
+        assert_eq!(resolved, file.to_str().unwrap());
+    }
+
+    #[test]
+    fn resolve_disk_dir_with_qcow2() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("disk.qcow2"), b"fake").unwrap();
+        std::fs::write(dir.path().join("other.txt"), b"other").unwrap();
+        let resolved = QemuEngine::resolve_disk(dir.path().to_str().unwrap());
+        assert!(resolved.ends_with("disk.qcow2"));
+    }
+
+    #[test]
+    fn resolve_disk_dir_single_file() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("myimage"), b"fake").unwrap();
+        let resolved = QemuEngine::resolve_disk(dir.path().to_str().unwrap());
+        assert!(resolved.ends_with("myimage"));
+    }
+
+    #[test]
+    fn resolve_disk_dir_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        // Multiple files, none .qcow2
+        std::fs::write(dir.path().join("a"), b"fake").unwrap();
+        std::fs::write(dir.path().join("b"), b"fake").unwrap();
+        let resolved = QemuEngine::resolve_disk(dir.path().to_str().unwrap());
+        assert!(resolved.ends_with("disk.qcow2")); // fallback
+    }
+
+    #[test]
+    fn resolve_disk_empty_dir_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let resolved = QemuEngine::resolve_disk(dir.path().to_str().unwrap());
+        assert!(resolved.ends_with("disk.qcow2"));
+    }
+}

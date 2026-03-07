@@ -42,7 +42,10 @@ pub trait VmEngine: Send + Sync {
     fn name(&self) -> &'static str;
 }
 
-/// Create an engine instance for the given kind.
+/// Create an engine instance for the given [`Engine`] kind.
+///
+/// # Panics
+/// Panics if the requested engine is not available on the current platform.
 pub fn create_engine(kind: Engine) -> Box<dyn VmEngine> {
     match kind {
         #[cfg(target_os = "linux")]
