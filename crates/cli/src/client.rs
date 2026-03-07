@@ -21,10 +21,10 @@ impl Client {
         };
 
         let mut headers = HeaderMap::new();
-        if let Some(key) = api_key {
-            if let Ok(val) = HeaderValue::from_str(&format!("Bearer {key}")) {
-                headers.insert(AUTHORIZATION, val);
-            }
+        if let Some(key) = api_key
+            && let Ok(val) = HeaderValue::from_str(&format!("Bearer {key}"))
+        {
+            headers.insert(AUTHORIZATION, val);
         }
 
         Self {
