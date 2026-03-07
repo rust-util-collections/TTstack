@@ -5,6 +5,7 @@
 
 use super::VmEngine;
 use crate::model::{RUN_DIR, Vm, VmState};
+use crate::net;
 use ruc::*;
 use std::process::Command;
 
@@ -13,6 +14,16 @@ pub struct BhyveEngine;
 impl BhyveEngine {
     pub fn new() -> Self {
         Self
+    }
+
+    fn pid_path(vm: &Vm) -> String {
+        format!("{RUN_DIR}/bhyve-{}.pid", vm.id)
+    }
+
+    fn read_pid(vm: &Vm) -> Option<i32> {
+        std::fs::read_to_string(Self::pid_path(vm))
+            .ok()
+            .and_then(|s| s.trim().parse().ok())
     }
 }
 
@@ -31,8 +42,11 @@ impl VmEngine for BhyveEngine {
             return Err(eg!("bhyveload failed: {}", stderr));
         }
 
-        // Launch the VM
-        let tap = format!("tap-{}", vm.id);
+        // Launch the VM as a background daemon
+        let tap = net::tap_name(&vm.id);
+        let pid_path = format!("{RUN_DIR}/bhyve-{}.pid", vm.id);
+        std::fs::create_dir_all(RUN_DIR).c(d!("create pid dir"))?;
+
         let child = Command::new("bhyve")
             .args(["-A", "-H", "-P"])
             .args(["-c", &vm.cpu.to_string()])
@@ -41,14 +55,15 @@ impl VmEngine for BhyveEngine {
             .args(["-s", &format!("3:0,virtio-blk,{image_path}")])
             .args(["-s", &format!("4:0,virtio-net,{tap}")])
             .args(["-s", "31,lpc"])
-            .args(["-l", "com1,stdio"])
+            .args(["-l", "com1,/dev/null"])
             .arg(&vm.id)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .spawn()
             .c(d!("failed to spawn bhyve"))?;
 
         // Record PID
-        let pid_path = format!("{RUN_DIR}/bhyve-{}.pid", vm.id);
-        std::fs::create_dir_all(RUN_DIR).c(d!("create pid dir"))?;
         std::fs::write(&pid_path, child.id().to_string()).c(d!("write pid"))?;
 
         Ok(())
@@ -77,10 +92,20 @@ impl VmEngine for BhyveEngine {
     }
 
     fn destroy(&self, vm: &Vm) -> Result<()> {
-        self.stop(vm)?;
+        // Kill the bhyve process if still alive
+        if let Some(pid) = Self::read_pid(vm) {
+            let _ = nix::sys::signal::kill(
+                nix::unistd::Pid::from_raw(pid),
+                nix::sys::signal::Signal::SIGKILL,
+            );
+        }
 
-        let pid_path = format!("{RUN_DIR}/bhyve-{}.pid", vm.id);
-        let _ = std::fs::remove_file(&pid_path);
+        // Clean up the bhyve VM device
+        let _ = Command::new("bhyvectl")
+            .args(["--destroy", "--vm", &vm.id])
+            .output();
+
+        let _ = std::fs::remove_file(Self::pid_path(vm));
 
         Ok(())
     }
