@@ -48,10 +48,10 @@ async fn main() {
     let heartbeat_state = state.clone();
     tokio::spawn(async move {
         let mut headers = reqwest::header::HeaderMap::new();
-        if let Some(key) = &heartbeat_state.api_key {
-            if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {key}")) {
-                headers.insert(reqwest::header::AUTHORIZATION, val);
-            }
+        if let Some(key) = &heartbeat_state.api_key
+            && let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {key}"))
+        {
+            headers.insert(reqwest::header::AUTHORIZATION, val);
         }
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
@@ -102,9 +102,7 @@ async fn main() {
         api_routes
     };
 
-    let app = Router::new()
-        .route("/", get(web::index))
-        .merge(api_routes);
+    let app = Router::new().route("/", get(web::index)).merge(api_routes);
 
     let listener = tokio::net::TcpListener::bind(&cfg.listen)
         .await
@@ -149,10 +147,10 @@ async fn expire_envs(state: &CtlState) {
     };
 
     let mut headers = reqwest::header::HeaderMap::new();
-    if let Some(key) = &state.api_key {
-        if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {key}")) {
-            headers.insert(reqwest::header::AUTHORIZATION, val);
-        }
+    if let Some(key) = &state.api_key
+        && let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {key}"))
+    {
+        headers.insert(reqwest::header::AUTHORIZATION, val);
     }
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
