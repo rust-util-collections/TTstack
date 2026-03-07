@@ -1,6 +1,8 @@
 //! TTstack CLI — manage your private cloud from the command line.
 
 mod client;
+mod deploy;
+mod image_builder;
 
 use clap::{Parser, Subcommand};
 use client::Client;
@@ -39,10 +41,15 @@ enum Cmd {
         #[command(subcommand)]
         action: EnvCmd,
     },
-    /// List available images.
+    /// Manage images.
     Image {
         #[command(subcommand)]
         action: ImageCmd,
+    },
+    /// Deploy TTstack to local or remote hosts.
+    Deploy {
+        #[command(subcommand)]
+        action: DeployCmd,
     },
 }
 
@@ -114,6 +121,47 @@ enum EnvCmd {
 enum ImageCmd {
     /// List available images across all hosts.
     List,
+    /// List built-in image recipes that can be auto-created.
+    Recipes,
+    /// Create an image from a built-in recipe.
+    Create {
+        /// Recipe name (see 'tt image recipes'), or "all".
+        name: String,
+        /// Image directory (for non-Docker engines).
+        #[arg(long, default_value = "/home/ttstack/images")]
+        image_dir: String,
+        /// Only create images for this engine (docker, firecracker, qemu, jail).
+        #[arg(long)]
+        engine: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum DeployCmd {
+    /// Deploy agent on this host (requires root).
+    Agent {
+        /// Path to release binaries directory.
+        #[arg(long, default_value = "./target/release")]
+        release_dir: String,
+    },
+    /// Deploy controller on this host (requires root).
+    Ctl {
+        /// Path to release binaries directory.
+        #[arg(long, default_value = "./target/release")]
+        release_dir: String,
+    },
+    /// Deploy both agent and controller on this host (requires root).
+    All {
+        /// Path to release binaries directory.
+        #[arg(long, default_value = "./target/release")]
+        release_dir: String,
+    },
+    /// Distributed deploy to all hosts defined in a config file.
+    Dist {
+        /// Path to deploy config (TOML format).
+        #[arg(default_value = "deploy.toml")]
+        config: String,
+    },
 }
 
 #[tokio::main]
@@ -129,6 +177,55 @@ async fn main() {
         return;
     }
 
+    // Deploy and image-create commands don't need a controller
+    if let Cmd::Deploy { action } = &cli.cmd {
+        let result = match action {
+            DeployCmd::Agent { release_dir } => deploy::deploy_local("agent", release_dir).await,
+            DeployCmd::Ctl { release_dir } => deploy::deploy_local("ctl", release_dir).await,
+            DeployCmd::All { release_dir } => deploy::deploy_local("all", release_dir).await,
+            DeployCmd::Dist { config } => deploy::deploy_distributed(config).await,
+        };
+        if let Err(e) = result {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    if let Cmd::Image {
+        action: ImageCmd::Recipes,
+    } = &cli.cmd
+    {
+        image_builder::list_recipes();
+        return;
+    }
+
+    if let Cmd::Image {
+        action:
+            ImageCmd::Create {
+                name,
+                image_dir,
+                engine,
+            },
+    } = &cli.cmd
+    {
+        let dir = std::path::Path::new(image_dir);
+        let result = if name == "all" {
+            if let Some(eng) = engine {
+                image_builder::create_all_for_engine(eng, dir).await
+            } else {
+                image_builder::create_all(dir).await
+            }
+        } else {
+            image_builder::create_image(name, dir).await
+        };
+        if let Err(e) = result {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
     let addr = cli.server.or_else(client::load_config).unwrap_or_else(|| {
         eprintln!("No controller address. Run: tt config <addr>");
         std::process::exit(1);
@@ -137,7 +234,7 @@ async fn main() {
     let c = Client::new(&addr);
 
     let result = match cli.cmd {
-        Cmd::Config { .. } => unreachable!(),
+        Cmd::Config { .. } | Cmd::Deploy { .. } => unreachable!(),
         Cmd::Status => cmd_status(&c).await,
         Cmd::Host { action } => cmd_host(&c, action).await,
         Cmd::Env { action } => cmd_env(&c, action).await,
@@ -358,6 +455,9 @@ async fn cmd_image(c: &Client, action: ImageCmd) -> Result<()> {
             for img in images {
                 println!("{:<30} {:<12}", img.name, img.host_id);
             }
+        }
+        ImageCmd::Recipes | ImageCmd::Create { .. } => {
+            unreachable!("handled before controller connection")
         }
     }
     Ok(())

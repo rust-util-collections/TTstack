@@ -25,6 +25,7 @@ clap = { version = "4", features = ["derive"] }
 uuid = { version = "1", features = ["v4"] }
 nix = { version = "0.29", features = ["net", "socket", "ioctl", "fs", "signal"] }
 tempfile = "3"
+toml = "0.8"
 
 [profile.release]
 lto = true

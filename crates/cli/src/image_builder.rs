@@ -1,0 +1,498 @@
+//! Automatic guest image creation for all supported engines.
+//!
+//! Generates ready-to-use images so users can start creating VMs
+//! immediately after deploying TTstack.
+
+use ruc::*;
+use std::path::{Path, PathBuf};
+use tokio::process::Command;
+
+// ── Image catalog ───────────────────────────────────────────────────
+
+/// A built-in image recipe that can be auto-generated.
+pub struct ImageRecipe {
+    pub name: &'static str,
+    pub engine: &'static str,
+    pub description: &'static str,
+}
+
+/// List of all auto-generatable images.
+pub const RECIPES: &[ImageRecipe] = &[
+    // Docker / Podman — lightweight containers
+    ImageRecipe {
+        name: "alpine",
+        engine: "docker",
+        description: "Alpine Linux 3.21 (minimal, ~8MB)",
+    },
+    ImageRecipe {
+        name: "debian",
+        engine: "docker",
+        description: "Debian 13 Trixie (slim, ~75MB)",
+    },
+    ImageRecipe {
+        name: "ubuntu",
+        engine: "docker",
+        description: "Ubuntu 24.04 LTS (minimal, ~30MB)",
+    },
+    ImageRecipe {
+        name: "rockylinux",
+        engine: "docker",
+        description: "Rocky Linux 9 (minimal, ~70MB)",
+    },
+    ImageRecipe {
+        name: "nginx",
+        engine: "docker",
+        description: "Nginx web server (Alpine-based, ~45MB)",
+    },
+    ImageRecipe {
+        name: "redis",
+        engine: "docker",
+        description: "Redis 7 (Alpine-based, ~35MB)",
+    },
+    ImageRecipe {
+        name: "postgres",
+        engine: "docker",
+        description: "PostgreSQL 17 (Alpine-based, ~85MB)",
+    },
+    // Firecracker — microVMs
+    ImageRecipe {
+        name: "fc-alpine",
+        engine: "firecracker",
+        description: "Alpine Linux microVM (kernel + rootfs, ~50MB)",
+    },
+    // QEMU/KVM — full VMs (cloud images)
+    ImageRecipe {
+        name: "alpine-cloud",
+        engine: "qemu",
+        description: "Alpine Linux 3.21 cloud image (qcow2, ~150MB)",
+    },
+    ImageRecipe {
+        name: "debian-cloud",
+        engine: "qemu",
+        description: "Debian 13 generic cloud image (qcow2, ~350MB)",
+    },
+    ImageRecipe {
+        name: "ubuntu-cloud",
+        engine: "qemu",
+        description: "Ubuntu 24.04 cloud image (qcow2, ~600MB)",
+    },
+    // Jail — FreeBSD containers
+    ImageRecipe {
+        name: "freebsd-base",
+        engine: "jail",
+        description: "FreeBSD 14.3 base (fetched from releases, ~180MB)",
+    },
+];
+
+/// Print available image recipes.
+pub fn list_recipes() {
+    println!("{:<16} {:<14} DESCRIPTION", "NAME", "ENGINE");
+    for r in RECIPES {
+        println!("{:<16} {:<14} {}", r.name, r.engine, r.description);
+    }
+}
+
+// ── Docker / Podman images ──────────────────────────────────────────
+
+/// Map recipe name to Docker image tag.
+fn docker_tag(name: &str) -> &str {
+    match name {
+        "alpine" => "alpine:3.21",
+        "debian" => "debian:trixie-slim",
+        "ubuntu" => "ubuntu:24.04",
+        "rockylinux" => "rockylinux:9-minimal",
+        "nginx" => "nginx:alpine",
+        "redis" => "redis:7-alpine",
+        "postgres" => "postgres:17-alpine",
+        _ => name,
+    }
+}
+
+async fn detect_runtime() -> Result<&'static str> {
+    if Command::new("docker").arg("version").output().await.map(|o| o.status.success()).unwrap_or(false) {
+        return Ok("docker");
+    }
+    if Command::new("podman").arg("version").output().await.map(|o| o.status.success()).unwrap_or(false) {
+        return Ok("podman");
+    }
+    Err(eg!("neither docker nor podman found"))
+}
+
+async fn create_docker(name: &str) -> Result<()> {
+    let rt = detect_runtime().await?;
+    let tag = docker_tag(name);
+
+    println!("[image] pulling {tag} via {rt}...");
+    let output = Command::new(rt)
+        .args(["pull", tag])
+        .output()
+        .await
+        .c(d!("pull failed"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(eg!("{rt} pull {tag} failed: {}", stderr));
+    }
+
+    // Tag as the short name so `tt env create --image alpine` works
+    if tag != name {
+        let _ = Command::new(rt)
+            .args(["tag", tag, name])
+            .output()
+            .await;
+    }
+
+    println!("[image] {name} ready ({rt})");
+    Ok(())
+}
+
+// ── Firecracker images ──────────────────────────────────────────────
+
+const FC_KERNEL_URL: &str =
+    "https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/x86_64/kernels/vmlinux.bin";
+
+/// Alpine rootfs mirror.
+const ALPINE_MINIROOTFS_URL: &str =
+    "https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/x86_64/alpine-minirootfs-3.21.3-x86_64.tar.gz";
+
+async fn create_firecracker(name: &str, image_dir: &Path) -> Result<()> {
+    let target = image_dir.join(name);
+    tokio::fs::create_dir_all(&target).await.c(d!("mkdir"))?;
+
+    let kernel = target.join("vmlinux");
+    let rootfs = target.join("rootfs.ext4");
+
+    // Download kernel
+    if !kernel.exists() {
+        println!("[image] downloading Firecracker kernel...");
+        download_file(FC_KERNEL_URL, &kernel).await?;
+        println!("[image] kernel: {}", human_size(&kernel).await);
+    } else {
+        println!("[image] kernel already exists");
+    }
+
+    // Create rootfs with Alpine userspace
+    if rootfs.exists() {
+        println!("[image] rootfs already exists");
+        return Ok(());
+    }
+
+    let rootfs_mb: u32 = 128;
+    println!("[image] creating {rootfs_mb}MB rootfs with Alpine userspace...");
+
+    // Create empty ext4 image
+    run_cmd("dd", &[
+        "if=/dev/zero",
+        &format!("of={}", rootfs.display()),
+        "bs=1M",
+        &format!("count={rootfs_mb}"),
+    ])
+    .await?;
+    run_cmd("mkfs.ext4", &["-q", &rootfs.display().to_string()]).await?;
+
+    // Mount and populate
+    let mnt = tempdir()?;
+    run_cmd("mount", &["-o", "loop", &rootfs.display().to_string(), &mnt.display().to_string()]).await?;
+
+    // Download and extract Alpine minirootfs
+    let tarball = format!("{}/alpine.tar.gz", mnt.display());
+    download_file(ALPINE_MINIROOTFS_URL, Path::new(&tarball)).await?;
+    run_cmd("tar", &["xzf", &tarball, "-C", &mnt.display().to_string()]).await?;
+    tokio::fs::remove_file(&tarball).await.ok();
+
+    // Create init wrapper that mounts essential filesystems
+    let init_script = format!(
+        r#"#!/bin/sh
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev 2>/dev/null
+mkdir -p /dev/pts
+mount -t devpts devpts /dev/pts
+hostname ttstack
+echo "TTstack Firecracker guest [{name}] booted OK"
+
+# Set up networking if virtio-net is available
+ip link set eth0 up 2>/dev/null
+ip addr add 10.10.0.2/16 dev eth0 2>/dev/null
+ip route add default via 10.10.0.1 2>/dev/null
+
+# Start shell or sleep forever
+if [ -x /bin/sh ]; then
+    /bin/sh
+else
+    while true; do sleep 3600; done
+fi
+"#
+    );
+    let init_path = format!("{}/init", mnt.display());
+    tokio::fs::write(&init_path, init_script).await.c(d!("write init"))?;
+    run_cmd("chmod", &["755", &init_path]).await?;
+
+    // Ensure /sbin/init symlink
+    let sbin = format!("{}/sbin", mnt.display());
+    tokio::fs::create_dir_all(&sbin).await.ok();
+    let sbin_init = format!("{sbin}/init");
+    if !Path::new(&sbin_init).exists() {
+        tokio::fs::symlink("/init", &sbin_init).await.ok();
+    }
+
+    // Set up DNS
+    let etc = format!("{}/etc", mnt.display());
+    tokio::fs::create_dir_all(&etc).await.ok();
+    tokio::fs::write(format!("{etc}/resolv.conf"), "nameserver 8.8.8.8\n")
+        .await
+        .ok();
+
+    run_cmd("umount", &[&mnt.display().to_string()]).await?;
+    tokio::fs::remove_dir(&mnt).await.ok();
+
+    println!(
+        "[image] {name} ready: kernel={}, rootfs={}",
+        human_size(&kernel).await,
+        human_size(&rootfs).await
+    );
+    Ok(())
+}
+
+// ── QEMU cloud images ──────────────────────────────────────────────
+
+fn qemu_cloud_url(name: &str) -> Option<&'static str> {
+    match name {
+        "alpine-cloud" => Some(
+            "https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/cloud/nocloud_alpine-3.21.3-x86_64-bios-cloudinit-r0.qcow2",
+        ),
+        "debian-cloud" => Some(
+            "https://cloud.debian.org/images/cloud/trixie/daily/latest/debian-13-generic-amd64-daily.qcow2",
+        ),
+        "ubuntu-cloud" => Some(
+            "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img",
+        ),
+        _ => None,
+    }
+}
+
+async fn create_qemu(name: &str, image_dir: &Path) -> Result<()> {
+    let target = image_dir.join(name);
+
+    if target.exists() {
+        println!("[image] {name} already exists");
+        return Ok(());
+    }
+
+    let url = qemu_cloud_url(name)
+        .ok_or_else(|| eg!("unknown QEMU image: {name}"))?;
+
+    println!("[image] downloading {name} cloud image...");
+    download_file(url, &target).await?;
+
+    // Ensure it's qcow2 format
+    let ext = url.rsplit('.').next().unwrap_or("");
+    if ext == "img" {
+        // Convert raw to qcow2
+        let tmp = target.with_extension("raw");
+        tokio::fs::rename(&target, &tmp).await.c(d!("rename"))?;
+        run_cmd(
+            "qemu-img",
+            &["convert", "-f", "raw", "-O", "qcow2", &tmp.display().to_string(), &target.display().to_string()],
+        )
+        .await?;
+        tokio::fs::remove_file(&tmp).await.ok();
+    }
+
+    println!("[image] {name} ready: {}", human_size(&target).await);
+    Ok(())
+}
+
+// ── Jail images (FreeBSD) ───────────────────────────────────────────
+
+async fn create_jail(name: &str, image_dir: &Path) -> Result<()> {
+    let target = image_dir.join(name);
+
+    if target.exists() {
+        println!("[image] {name} already exists");
+        return Ok(());
+    }
+
+    println!("[image] fetching FreeBSD base for jail...");
+    tokio::fs::create_dir_all(&target).await.c(d!("mkdir"))?;
+
+    // Detect FreeBSD version
+    let ver = Command::new("freebsd-version")
+        .output()
+        .await
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|_| "14.3-RELEASE".into());
+
+    // Extract major version for URL
+    let major = ver.split('.').next().unwrap_or("14");
+    let url = format!(
+        "https://download.freebsd.org/releases/amd64/{major}.3-RELEASE/base.txz"
+    );
+
+    let txz = format!("{}/base.txz", target.display());
+    download_file(&url, Path::new(&txz)).await?;
+
+    println!("[image] extracting base...");
+    run_cmd("tar", &["xf", &txz, "-C", &target.display().to_string()]).await?;
+    tokio::fs::remove_file(&txz).await.ok();
+
+    // Configure the jail root
+    let etc = target.join("etc");
+    tokio::fs::write(etc.join("resolv.conf"), "nameserver 8.8.8.8\n")
+        .await
+        .ok();
+    tokio::fs::write(
+        etc.join("rc.conf"),
+        "sendmail_enable=\"NONE\"\nsyslogd_flags=\"-ss\"\n",
+    )
+    .await
+    .ok();
+
+    println!("[image] {name} ready: FreeBSD jail base");
+    Ok(())
+}
+
+// ── Public entry point ──────────────────────────────────────────────
+
+/// Create a specific image by recipe name.
+pub async fn create_image(name: &str, image_dir: &Path) -> Result<()> {
+    let recipe = RECIPES
+        .iter()
+        .find(|r| r.name == name)
+        .ok_or_else(|| eg!("unknown image recipe '{name}' (run 'tt image recipes' to list)"))?;
+
+    match recipe.engine {
+        "docker" => create_docker(name).await,
+        "firecracker" => create_firecracker(name, image_dir).await,
+        "qemu" => create_qemu(name, image_dir).await,
+        "jail" => create_jail(name, image_dir).await,
+        _ => Err(eg!("unsupported engine: {}", recipe.engine)),
+    }
+}
+
+/// Create all images for a given engine.
+pub async fn create_all_for_engine(engine: &str, image_dir: &Path) -> Result<()> {
+    let matching: Vec<_> = RECIPES.iter().filter(|r| r.engine == engine).collect();
+    if matching.is_empty() {
+        return Err(eg!("no recipes for engine '{engine}'"));
+    }
+
+    for recipe in matching {
+        println!("\n--- {}: {} ---", recipe.name, recipe.description);
+        if let Err(e) = create_image(recipe.name, image_dir).await {
+            eprintln!("[image] WARN: failed to create {}: {e}", recipe.name);
+        }
+    }
+    Ok(())
+}
+
+/// Create all available images.
+pub async fn create_all(image_dir: &Path) -> Result<()> {
+    for recipe in RECIPES {
+        // Skip jail on non-FreeBSD and skip FreeBSD-only on Linux
+        if recipe.engine == "jail" && !cfg!(target_os = "freebsd") {
+            continue;
+        }
+        if recipe.engine == "firecracker" && cfg!(target_os = "freebsd") {
+            continue;
+        }
+
+        println!("\n--- {}: {} ---", recipe.name, recipe.description);
+        if let Err(e) = create_image(recipe.name, image_dir).await {
+            eprintln!("[image] WARN: failed to create {}: {e}", recipe.name);
+        }
+    }
+    Ok(())
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────
+
+async fn download_file(url: &str, dest: &Path) -> Result<()> {
+    let output = Command::new("curl")
+        .args(["-fSL", "--progress-bar", "-o"])
+        .arg(dest)
+        .arg(url)
+        .output()
+        .await
+        .c(d!("curl failed"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(eg!("download {} failed: {}", url, stderr));
+    }
+    Ok(())
+}
+
+async fn run_cmd(cmd: &str, args: &[&str]) -> Result<()> {
+    let output = Command::new(cmd)
+        .args(args)
+        .output()
+        .await
+        .c(d!(format!("run {cmd}")))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(eg!("{} failed: {}", cmd, stderr));
+    }
+    Ok(())
+}
+
+async fn human_size(path: &Path) -> String {
+    tokio::fs::metadata(path)
+        .await
+        .map(|m| {
+            let bytes = m.len();
+            if bytes >= 1024 * 1024 {
+                format!("{:.1} MB", bytes as f64 / 1024.0 / 1024.0)
+            } else if bytes >= 1024 {
+                format!("{:.1} KB", bytes as f64 / 1024.0)
+            } else {
+                format!("{bytes} B")
+            }
+        })
+        .unwrap_or_else(|_| "?".into())
+}
+
+fn tempdir() -> Result<PathBuf> {
+    let path = PathBuf::from(format!("/tmp/tt-image-{}", std::process::id()));
+    std::fs::create_dir_all(&path).c(d!("create temp dir"))?;
+    Ok(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recipes_have_unique_names() {
+        let mut seen = std::collections::HashSet::new();
+        for r in RECIPES {
+            assert!(seen.insert(r.name), "duplicate recipe: {}", r.name);
+        }
+    }
+
+    #[test]
+    fn docker_tags_resolve() {
+        assert_eq!(docker_tag("alpine"), "alpine:3.21");
+        assert_eq!(docker_tag("debian"), "debian:trixie-slim");
+        assert_eq!(docker_tag("unknown"), "unknown");
+    }
+
+    #[test]
+    fn qemu_urls_resolve() {
+        assert!(qemu_cloud_url("alpine-cloud").is_some());
+        assert!(qemu_cloud_url("debian-cloud").is_some());
+        assert!(qemu_cloud_url("ubuntu-cloud").is_some());
+        assert!(qemu_cloud_url("nonexistent").is_none());
+    }
+
+    #[test]
+    fn all_engines_covered() {
+        let engines: std::collections::HashSet<&str> =
+            RECIPES.iter().map(|r| r.engine).collect();
+        assert!(engines.contains("docker"));
+        assert!(engines.contains("firecracker"));
+        assert!(engines.contains("qemu"));
+        assert!(engines.contains("jail"));
+    }
+}
