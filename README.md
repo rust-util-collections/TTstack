@@ -133,7 +133,8 @@ tt image list                       List images across all hosts
 | **Linux** | QEMU/KVM, Firecracker, Docker/Podman | nftables NAT |
 | **FreeBSD** | Bhyve, Jail | PF NAT |
 
-Compile-time enforced — the project will not build on other platforms.
+The agent (`tt-agent`) is compile-time restricted to Linux and FreeBSD.
+The controller (`tt-ctl`) and CLI (`tt`) are cross-platform.
 
 **Note**: Bhyve does not support in-place pause/resume. `env stop` + `env start`
 on FreeBSD with Bhyve requires re-creating the VM.
@@ -144,7 +145,7 @@ on FreeBSD with Bhyve requires re-creating the VM.
 |---------|-------------|-------------|
 | **zfs** | ZFS snapshot + clone | Production (instant, space-efficient) |
 | **btrfs** | Btrfs subvolume snapshot | Production (instant, space-efficient) |
-| **raw** | `cp --reflink=auto` | Development, any filesystem |
+| **raw** | `cp` (reflink on Linux if supported) | Development, any filesystem |
 
 ## Agent Configuration
 

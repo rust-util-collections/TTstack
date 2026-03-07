@@ -145,8 +145,9 @@ qemu-nbd --disconnect /dev/nbd0
 
 ### Raw (default)
 
-Images are plain files or directories. Cloning uses `cp --reflink=auto`
-(CoW if the filesystem supports it, full copy otherwise).
+Images are plain files or directories. On Linux, cloning uses
+`cp --reflink=auto` (CoW if the filesystem supports it, full copy
+otherwise). On FreeBSD, plain `cp -a` is used.
 
 ```bash
 # No special setup needed — just place images in image_dir
@@ -202,7 +203,95 @@ Guest VM ←→ TAP device ←→ tt0 bridge (10.10.0.1/16) ←→ NAT (nftables
 ```
 
 - Each VM gets a unique IP in the 10.10.0.0/16 range
-- Port forwarding: host port → guest port via nftables DNAT rules
+- Port forwarding: host port → guest port via nftables DNAT (Linux) or PF rdr (FreeBSD)
 - The `tt0` bridge and NAT table are created automatically by the agent
 
 Docker containers use Docker's native networking with `-p` port publishing.
+
+FreeBSD uses PF instead of nftables:
+
+```
+Guest VM ←→ TAP device ←→ tt0 bridge (10.10.0.1/16) ←→ NAT (PF) ←→ Host
+```
+
+## Creating a FreeBSD Test VM on Linux
+
+Running FreeBSD inside QEMU on a Linux host is useful for testing the
+FreeBSD agent, controller, and CLI. This section documents the
+non-interactive approach, including common pitfalls.
+
+### Recommended: mfsBSD Live ISO
+
+[mfsBSD](https://mfsbsd.vx.sk/) is a FreeBSD live CD that runs entirely
+in RAM with SSH enabled out of the box. This is the fastest way to get
+a working FreeBSD environment for build/test purposes.
+
+```bash
+# Download mfsBSD SE (Special Edition includes base packages)
+curl -sL https://mfsbsd.vx.sk/files/iso/14/amd64/mfsbsd-se-14.2-RELEASE-amd64.iso \
+  -o /tmp/mfsbsd.iso
+
+# Create a work disk for persistent storage
+qemu-img create -f qcow2 /tmp/fbsd-work.qcow2 20G
+
+# Boot the VM (8GB RAM recommended for compiling Rust)
+qemu-system-x86_64 -enable-kvm -m 8192 -smp 4 \
+  -drive file=/tmp/fbsd-work.qcow2,format=qcow2,if=virtio \
+  -cdrom /tmp/mfsbsd.iso -boot d \
+  -netdev user,id=net0,hostfwd=tcp::2222-:22 \
+  -device virtio-net-pci,netdev=net0 \
+  -display none -daemonize
+
+# SSH in (default root password: mfsroot)
+sshpass -p 'mfsroot' ssh -p 2222 root@127.0.0.1
+```
+
+### Installing FreeBSD to Disk from mfsBSD
+
+mfsBSD runs in RAM so installed packages are lost on reboot. For
+persistent use, install FreeBSD to the work disk:
+
+```bash
+# Inside the mfsBSD VM:
+gpart create -s gpt vtbd0
+gpart add -t freebsd-boot -s 512k vtbd0
+gpart add -t freebsd-ufs -l rootfs vtbd0
+gpart bootcode -b /boot/pmbr -p /boot/gptboot -i 1 vtbd0
+newfs -U /dev/vtbd0p2
+
+# Mount and extract base + kernel
+mkdir -p /rw/disk && mount /dev/vtbd0p2 /rw/disk
+cd /rw/disk
+fetch -o - https://download.freebsd.org/releases/amd64/14.3-RELEASE/base.txz | tar xf -
+fetch -o - https://download.freebsd.org/releases/amd64/14.3-RELEASE/kernel.txz | tar xf -
+
+# Configure the installed system
+echo '/dev/vtbd0p2  /  ufs  rw  1  1' > etc/fstab
+cat > etc/rc.conf <<'RCEOF'
+hostname="fbsd-test"
+ifconfig_vtnet0="DHCP"
+sshd_enable="YES"
+sendmail_enable="NONE"
+RCEOF
+echo 'mfsroot' | chroot /rw/disk pw usermod root -h 0
+sed -i '' 's/^#PermitRootLogin .*/PermitRootLogin yes/' etc/ssh/sshd_config
+echo 'nameserver 10.0.2.3' > etc/resolv.conf
+
+umount /rw/disk
+```
+
+Then reboot the VM without the `-cdrom` and `-boot d` flags to boot
+from disk.
+
+### Common Pitfalls
+
+| Problem | Cause | Solution |
+|---------|-------|----------|
+| FreeBSD cloud images won't accept SSH | Root login disabled, no password auth, cloud-init issues | Use mfsBSD instead |
+| `virt-customize` fails on FreeBSD images | libguestfs cannot write to UFS filesystems | Use mfsBSD or manual install |
+| mfsBSD `pkg install` fails with "No error" | pkg 2.1.0 on mfsBSD 14.2 cannot handle zstd-packed repos | Install FreeBSD to disk for a newer pkg |
+| `cp --reflink=auto` fails on FreeBSD | GNU option not available | Fixed in TTstack — FreeBSD uses `cp -a` |
+| `ifconfig bridge create` names bridge `bridge0` | FreeBSD auto-assigns names | Fixed in TTstack — uses `ifconfig bridge create name tt0` |
+| `ifconfig <tap> create` fails for custom names | Must specify type first | Fixed in TTstack — uses `ifconfig tap create name <tap>` |
+| Bhyve TAP name mismatch | Old code used `tap-{id}` instead of hashed name | Fixed in TTstack — uses `net::tap_name()` |
+| OOM during Rust compilation on mfsBSD | mfsBSD runs in RAM; 4GB is insufficient | Use 8GB+ RAM or install to disk |

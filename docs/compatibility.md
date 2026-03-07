@@ -21,7 +21,7 @@ not yet verified in CI or lab environments).
 | Ubuntu | 24.04 LTS | Planned | raw, ZFS, Btrfs | QEMU/KVM, Firecracker, Docker | Debian-derivative; expected full compatibility |
 | Rocky Linux | 10.x | Planned | raw, ZFS, Btrfs | QEMU/KVM, Firecracker, Docker/Podman | RHEL-derivative; nftables is the default firewall backend |
 | Gentoo | 23.0 | Planned | raw, ZFS, Btrfs | QEMU/KVM, Firecracker, Docker | Requires manual package installation |
-| FreeBSD | 14.x | Planned | raw, ZFS | Bhyve, Jail | Uses PF instead of nftables; compile-time platform support exists |
+| FreeBSD | 14.3 | **Tested** | raw, ZFS | Bhyve, Jail | Uses PF instead of nftables; clang from base system |
 
 ### Host OS Requirements
 
@@ -98,6 +98,21 @@ modprobe tun  # if /dev/net/tun is missing
 - QEMU engine: Full lifecycle (create → run → pause → resume → destroy)
 - Multi-host: Successfully participates as remote agent in distributed fleet
 - Cross-host scheduling: VMs correctly placed and managed from central controller
+
+#### FreeBSD 14.3-RELEASE — x86_64
+
+- **Kernel**: 14.3-RELEASE GENERIC
+- **Clang**: 19.1.7 (from base system)
+- **Rust**: 1.92.0 (from pkg)
+- **Storage**: raw
+- **Engines detected**: bhyve, jail
+
+**Test results**:
+- All 50 unit tests pass natively on FreeBSD
+- Agent: Starts successfully, bridge `tt0` created via `ifconfig bridge create name tt0`
+- CLI: Connects to remote controller, displays fleet status and host list
+- Controller: Builds and runs on FreeBSD (cross-platform component)
+- Build: Compiles all three binaries (tt, tt-agent, tt-ctl) without modification
 
 ---
 
@@ -192,7 +207,8 @@ Bhyve is FreeBSD's native hypervisor. It supports:
 | OpenBSD | 7.x | |
 | Windows | 10, 11, Server 2019+ | Experimental |
 
-**Not yet tested** — requires FreeBSD host.
+**Tested**: Build and unit tests pass on FreeBSD 14.3. Agent starts
+and reports bhyve/jail engines. CLI and controller work correctly.
 
 ---
 
@@ -209,7 +225,7 @@ Bhyve is FreeBSD's native hypervisor. It supports:
 
 **Tested**: Full nftables networking on Debian 13 and Alpine 3.23,
 including port forwarding, NAT, deny-outgoing, and Docker-native
-port publishing.
+port publishing. Bridge and TAP creation on FreeBSD 14.3.
 
 ---
 
@@ -217,14 +233,18 @@ port publishing.
 
 | Component | Minimum Version | Tested Version |
 |-----------|----------------|----------------|
-| Rust | 1.86 (edition 2024) | 1.93.1 |
-| Cargo | Matching Rust | 1.93.1 |
-| C compiler | GCC or Clang | GCC 14.2 (Debian), GCC 15.2 (Alpine) |
+| Rust | 1.86 (edition 2024) | 1.92.0–1.93.1 |
+| Cargo | Matching Rust | 1.92.0–1.93.1 |
+| C compiler | GCC or Clang | GCC 14.2 (Debian), GCC 15.2 (Alpine), Clang 19.1 (FreeBSD) |
 | SQLite | 3.x (bundled) | Bundled via `libsqlite3-sys` |
 | OpenSSL | 1.1+ or 3.x | 3.5.x |
 
 **Alpine build note**: Requires `openssl-dev` and `openssl-libs-static`
-for static linking.
+for static linking. For musl cross-compilation from Debian:
+`OPENSSL_STATIC=1 OPENSSL_NO_VENDOR=0 cargo build --release --target x86_64-unknown-linux-musl --features reqwest/native-tls-vendored`
+
+**FreeBSD build note**: Requires `rust`, `pkgconf`, and `openssl` from pkg.
+FreeBSD 14.3 ships clang 19 in base — no additional compiler setup needed.
 
 ---
 
@@ -232,9 +252,9 @@ for static linking.
 
 | Component | Tested | Planned |
 |-----------|--------|---------|
-| Host OS | Debian 13, Alpine 3.23 | Ubuntu 24.04, Rocky 10, Gentoo 23, FreeBSD 14 |
-| VM engines | QEMU/KVM, Firecracker, Docker | Bhyve, Jail (FreeBSD) |
+| Host OS | Debian 13, Alpine 3.23, FreeBSD 14.3 | Ubuntu 24.04, Rocky 10, Gentoo 23 |
+| VM engines | QEMU/KVM, Firecracker, Docker (Linux); Bhyve, Jail (FreeBSD) | — |
 | Storage backends | raw, ZFS, Btrfs | All verified on Debian 13 |
-| Multi-host | 2-host fleet (Debian + Alpine) | Up to 50 hosts |
+| Multi-host | 3-host fleet (Debian + Alpine + FreeBSD) | Up to 50 hosts |
 | Guest OS (containers) | Alpine-based test images | Full OCI ecosystem |
 | Guest OS (VMs) | Minimal test images | See guest compatibility tables above |
