@@ -1,5 +1,6 @@
 //! HTTP client for communicating with the tt-ctl controller.
 
+use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use ruc::*;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -12,17 +13,25 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(addr: &str) -> Self {
+    pub fn new(addr: &str, api_key: Option<&str>) -> Self {
         let base_url = if addr.starts_with("http") {
             addr.to_string()
         } else {
             format!("http://{addr}")
         };
 
+        let mut headers = HeaderMap::new();
+        if let Some(key) = api_key {
+            if let Ok(val) = HeaderValue::from_str(&format!("Bearer {key}")) {
+                headers.insert(AUTHORIZATION, val);
+            }
+        }
+
         Self {
             base_url,
             http: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(60))
+                .default_headers(headers)
                 .build()
                 .unwrap(),
         }
@@ -100,18 +109,39 @@ impl Client {
 
 const CONFIG_FILE: &str = ".ttconfig";
 
-/// Read the controller address from ~/.ttconfig.
-pub fn load_config() -> Option<String> {
-    let path = dirs_path();
-    std::fs::read_to_string(&path)
-        .ok()
-        .map(|s| s.trim().to_string())
+/// CLI configuration: controller address and optional API key.
+pub struct CliConfig {
+    pub addr: String,
+    pub api_key: Option<String>,
 }
 
-/// Save the controller address to ~/.ttconfig.
-pub fn save_config(addr: &str) -> Result<()> {
+/// Read the CLI config from ~/.ttconfig.
+///
+/// File format (one value per line):
+/// ```text
+/// <addr>
+/// <api_key>       # optional second line
+/// ```
+pub fn load_config() -> Option<CliConfig> {
     let path = dirs_path();
-    std::fs::write(&path, addr).c(d!("save config"))
+    let content = std::fs::read_to_string(&path).ok()?;
+    let mut lines = content.lines();
+    let addr = lines.next()?.trim().to_string();
+    if addr.is_empty() {
+        return None;
+    }
+    let api_key = lines.next().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    Some(CliConfig { addr, api_key })
+}
+
+/// Save the controller address and optional API key to ~/.ttconfig.
+pub fn save_config(addr: &str, api_key: Option<&str>) -> Result<()> {
+    let path = dirs_path();
+    let content = match api_key {
+        Some(key) => format!("{addr}\n{key}\n"),
+        None => format!("{addr}\n"),
+    };
+    std::fs::write(&path, content).c(d!("save config"))
 }
 
 fn dirs_path() -> String {

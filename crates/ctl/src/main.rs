@@ -3,6 +3,7 @@
 //! The controller manages the fleet of hosts, schedules VM placement,
 //! and exposes an HTTP API for the CLI client and web interface.
 
+mod auth;
 mod config;
 mod db;
 mod handler;
@@ -56,10 +57,11 @@ async fn main() {
         }
     });
 
-    let app = Router::new()
-        // Web dashboard
-        .route("/", get(web::index))
-        // REST API
+    if cfg.api_key.is_some() {
+        eprintln!("API key authentication enabled");
+    }
+
+    let api_routes = Router::new()
         .route(
             "/api/hosts",
             get(handler::list_hosts).post(handler::register_host),
@@ -82,6 +84,19 @@ async fn main() {
         .route("/api/images", get(handler::list_images))
         .route("/api/status", get(handler::fleet_status))
         .with_state(state);
+
+    let api_routes = if let Some(key) = cfg.api_key {
+        api_routes.layer(axum::middleware::from_fn(
+            auth::make_auth_layer(key),
+        ))
+    } else {
+        api_routes
+    };
+
+    let app = Router::new()
+        // Web dashboard (no auth required)
+        .route("/", get(web::index))
+        .merge(api_routes);
 
     let listener = tokio::net::TcpListener::bind(&cfg.listen)
         .await

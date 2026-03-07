@@ -18,16 +18,23 @@ struct Cli {
     #[arg(long, short, global = true)]
     server: Option<String>,
 
+    /// API key for controller authentication.
+    #[arg(long, short = 'k', global = true, env = "TT_API_KEY")]
+    api_key: Option<String>,
+
     #[command(subcommand)]
     cmd: Cmd,
 }
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Configure the controller address.
+    /// Configure the controller address and optional API key.
     Config {
         /// Controller address, e.g. "10.0.0.1:9200".
         addr: String,
+        /// API key for authentication (optional).
+        #[arg(long, short = 'k')]
+        api_key: Option<String>,
     },
     /// Show fleet-wide status.
     Status,
@@ -168,12 +175,15 @@ enum DeployCmd {
 async fn main() {
     let cli = Cli::parse();
 
-    if let Cmd::Config { addr } = &cli.cmd {
-        if let Err(e) = client::save_config(addr) {
+    if let Cmd::Config { addr, api_key } = &cli.cmd {
+        if let Err(e) = client::save_config(addr, api_key.as_deref()) {
             eprintln!("Failed to save config: {e}");
             std::process::exit(1);
         }
         println!("Controller set to: {addr}");
+        if api_key.is_some() {
+            println!("API key saved.");
+        }
         return;
     }
 
@@ -226,12 +236,16 @@ async fn main() {
         return;
     }
 
-    let addr = cli.server.or_else(client::load_config).unwrap_or_else(|| {
+    let (addr, api_key) = if let Some(server) = cli.server {
+        (server, cli.api_key)
+    } else if let Some(cfg) = client::load_config() {
+        (cfg.addr, cli.api_key.or(cfg.api_key))
+    } else {
         eprintln!("No controller address. Run: tt config <addr>");
         std::process::exit(1);
-    });
+    };
 
-    let c = Client::new(&addr);
+    let c = Client::new(&addr, api_key.as_deref());
 
     let result = match cli.cmd {
         Cmd::Config { .. } | Cmd::Deploy { .. } => unreachable!(),

@@ -2,6 +2,9 @@
 //!
 //! Replaces `tools/deploy.sh` with a reliable, idempotent deploy
 //! embedded directly in the `tt` CLI binary.
+//!
+//! Supports both systemd (Debian/Ubuntu/Rocky) and OpenRC (Alpine)
+//! init systems, and handles non-root SSH users via sudo.
 
 use ruc::*;
 use serde::Deserialize;
@@ -28,6 +31,8 @@ pub struct GeneralConfig {
     pub user: String,
     #[serde(default = "default_release_dir")]
     pub release_dir: String,
+    /// API key for controller authentication. If not set, a random key is generated.
+    pub api_key: Option<String>,
 }
 
 impl Default for GeneralConfig {
@@ -36,8 +41,18 @@ impl Default for GeneralConfig {
             prefix: default_prefix(),
             user: default_user(),
             release_dir: default_release_dir(),
+            api_key: None,
         }
     }
+}
+
+fn generate_api_key() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let seed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("tt-{:016x}{:016x}", seed, seed.wrapping_mul(6364136223846793005))
 }
 
 #[derive(Debug, Deserialize)]
@@ -72,6 +87,8 @@ pub struct AgentConfig {
     #[serde(default = "default_disk_total")]
     pub disk_total: String,
     pub host_id: Option<String>,
+    /// Override release_dir for this agent (e.g. for musl/cross-compiled binaries).
+    pub release_dir: Option<String>,
 }
 
 fn default_prefix() -> String {
@@ -121,24 +138,15 @@ struct SshTarget {
 }
 
 impl SshTarget {
-    fn ssh_args(&self) -> Vec<String> {
-        vec![
-            "-o".into(),
-            "StrictHostKeyChecking=no".into(),
-            "-o".into(),
-            "ConnectTimeout=10".into(),
-            "-p".into(),
-            self.port.to_string(),
-        ]
-    }
-
     async fn exec(&self, cmd: &str) -> Result<String> {
-        let mut args = self.ssh_args();
-        args.push(format!("{}@{}", self.user, self.host));
-        args.push(cmd.into());
-
         let output = Command::new("ssh")
-            .args(&args)
+            .args([
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "ConnectTimeout=10",
+                "-p", &self.port.to_string(),
+            ])
+            .arg(format!("{}@{}", self.user, self.host))
+            .arg(cmd)
             .output()
             .await
             .c(d!("ssh exec failed"))?;
@@ -153,12 +161,9 @@ impl SshTarget {
     async fn copy(&self, local: &Path, remote: &str) -> Result<()> {
         let output = Command::new("scp")
             .args([
-                "-o",
-                "StrictHostKeyChecking=no",
-                "-o",
-                "ConnectTimeout=10",
-                "-P",
-                &self.port.to_string(),
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "ConnectTimeout=10",
+                "-P", &self.port.to_string(),
             ])
             .arg(local)
             .arg(format!("{}@{}:{}", self.user, self.host, remote))
@@ -174,7 +179,7 @@ impl SshTarget {
     }
 }
 
-// ── Systemd unit template ───────────────────────────────────────────
+// ── Service templates ───────────────────────────────────────────────
 
 fn systemd_unit(name: &str, exec_start: &str, run_as_root: bool) -> String {
     let user_lines = if run_as_root {
@@ -202,6 +207,141 @@ WantedBy=multi-user.target
     )
 }
 
+fn openrc_initd(name: &str, exec_start: &str) -> String {
+    // Split exec_start into command and args for OpenRC
+    let mut parts = exec_start.splitn(2, ' ');
+    let cmd = parts.next().unwrap_or(exec_start);
+    let args = parts.next().unwrap_or("");
+
+    format!(
+        r#"#!/sbin/openrc-run
+
+name="{name}"
+description="TTstack {name}"
+command="{cmd}"
+command_args="{args}"
+command_background=true
+pidfile="/run/${{name}}.pid"
+output_log="/var/log/${{name}}.log"
+error_log="/var/log/${{name}}.log"
+
+depend() {{
+    need net
+    after firewall
+}}
+"#
+    )
+}
+
+/// Generate the platform-aware remote setup script.
+///
+/// Uses `sudo` for all privileged operations, detects init system,
+/// and handles both glibc (useradd) and busybox (adduser) user creation.
+#[allow(clippy::too_many_arguments)]
+fn remote_setup_script(
+    service_name: &str,
+    exec_cmd: &str,
+    user: &str,
+    home: &str,
+    prefix: &str,
+    tmp: &str,
+    binaries: &[&str],
+    extra_dirs: &[&str],
+    host_label: &str,
+) -> String {
+    let bin_copies: String = binaries
+        .iter()
+        .map(|b| {
+            format!(
+                "sudo cp {tmp}/{b} {prefix}/bin/{b}\nsudo chmod 755 {prefix}/bin/{b}",
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let dir_list: String = extra_dirs
+        .iter()
+        .map(|d| d.to_string())
+        .chain([format!("{home}/data"), format!("{home}/run")])
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let systemd_unit_content = systemd_unit(service_name, exec_cmd, true);
+    let openrc_initd_content = openrc_initd(service_name, exec_cmd);
+
+    format!(
+        r#"#!/bin/sh
+set -e
+
+# Create service user (portable: works on glibc and busybox)
+if id {user} >/dev/null 2>&1; then
+    echo "[deploy] user '{user}' exists"
+else
+    echo "[deploy] creating user '{user}'"
+    if command -v useradd >/dev/null 2>&1; then
+        sudo useradd -r -m -d {home} -s /bin/sh {user}
+    elif command -v adduser >/dev/null 2>&1; then
+        sudo adduser -D -h {home} -s /bin/sh {user} 2>/dev/null || true
+    fi
+fi
+
+# Create directories
+sudo mkdir -p {prefix}/bin {dir_list}
+
+# Install binaries
+{bin_copies}
+
+# Set ownership
+sudo chown -R {user}:{user} {home} 2>/dev/null || true
+
+# Detect init system and install service
+if command -v systemctl >/dev/null 2>&1 && [ -d /etc/systemd/system ]; then
+    echo "[deploy] using systemd"
+    sudo tee /etc/systemd/system/{service_name}.service > /dev/null <<'UNIT'
+{systemd_unit}
+UNIT
+    sudo systemctl daemon-reload
+    sudo systemctl enable {service_name}
+    sudo systemctl restart {service_name}
+    sleep 1
+    sudo systemctl is-active {service_name} && echo "[deploy] {service_name} is active"
+elif command -v rc-service >/dev/null 2>&1; then
+    echo "[deploy] using OpenRC"
+    sudo tee /etc/init.d/{service_name} > /dev/null <<'INITD'
+{openrc_initd}
+INITD
+    sudo chmod 755 /etc/init.d/{service_name}
+    sudo rc-update add {service_name} default 2>/dev/null || true
+    sudo rc-service {service_name} restart 2>/dev/null || sudo rc-service {service_name} start
+    sleep 1
+    sudo rc-service {service_name} status && echo "[deploy] {service_name} is running"
+else
+    echo "[deploy] WARNING: no known init system; starting {service_name} manually"
+    sudo pkill -f '{prefix}/bin/{service_name}' 2>/dev/null || true
+    sleep 1
+    sudo nohup {exec_cmd} > /var/log/{service_name}.log 2>&1 &
+    sleep 2
+    pgrep -f '{prefix}/bin/{service_name}' && echo "[deploy] {service_name} started (manual)"
+fi
+
+# Cleanup
+rm -rf {tmp}
+echo "[deploy] {service_name} deployed on {host_label}"
+"#,
+        user = user,
+        home = home,
+        prefix = prefix,
+        tmp = tmp,
+        dir_list = dir_list,
+        bin_copies = bin_copies,
+        service_name = service_name,
+        exec_cmd = exec_cmd,
+        systemd_unit = systemd_unit_content,
+        openrc_initd = openrc_initd_content,
+        host_label = host_label,
+    )
+}
+
 // ── Local deploy ────────────────────────────────────────────────────
 
 async fn local_ensure_user(user: &str) -> Result<()> {
@@ -216,7 +356,7 @@ async fn local_ensure_user(user: &str) -> Result<()> {
     } else {
         println!("[deploy] creating user '{user}'");
         let out = Command::new("useradd")
-            .args(["-r", "-m", "-d", &format!("/home/{user}"), "-s", "/bin/bash", user])
+            .args(["-r", "-m", "-d", &format!("/home/{user}"), "-s", "/bin/sh", user])
             .output()
             .await
             .c(d!("create user"))?;
@@ -311,7 +451,6 @@ async fn local_restart_service(name: &str) -> Result<()> {
 
 /// Deploy locally on this host (requires root).
 pub async fn deploy_local(role: &str, release_dir: &str) -> Result<()> {
-    // Check if running as root via /proc or id command
     let uid = std::fs::read_to_string("/proc/self/status")
         .ok()
         .and_then(|s| {
@@ -363,11 +502,15 @@ pub async fn deploy_local(role: &str, release_dir: &str) -> Result<()> {
                 local_install_bin(&bin, prefix).await?;
             }
 
+            let api_key = generate_api_key();
             let cmd = format!(
-                "{prefix}/bin/tt-ctl --listen 0.0.0.0:9200 --data-dir {home}/ctl"
+                "{prefix}/bin/tt-ctl --listen 0.0.0.0:9200 --data-dir {home}/ctl --api-key {api_key}"
             );
             local_install_systemd("tt-ctl", &cmd, false).await?;
             local_restart_service("tt-ctl").await?;
+
+            println!("[deploy] API key: {api_key}");
+            println!("[deploy] Run: tt config 127.0.0.1:9200 -k {api_key}");
         }
         _ => {}
     }
@@ -396,6 +539,8 @@ pub async fn deploy_distributed(config_path: &str) -> Result<()> {
         }
     }
 
+    let api_key = cfg.general.api_key.clone().unwrap_or_else(generate_api_key);
+
     // Deploy controller
     if let Some(ctl) = &cfg.controller {
         println!("\n[deploy] === {} (controller) ===", ctl.host);
@@ -408,49 +553,29 @@ pub async fn deploy_distributed(config_path: &str) -> Result<()> {
         let tmp = format!("/tmp/ttstack-deploy-{}", std::process::id());
         target.exec(&format!("mkdir -p {tmp}")).await?;
 
-        // Upload binaries
         for bin in ["tt-ctl", "tt"] {
             target.copy(&release_dir.join(bin), &format!("{tmp}/{bin}")).await?;
             println!("[deploy] uploaded {bin}");
         }
 
         let data_dir = ctl.data_dir.clone().unwrap_or_else(|| format!("{home}/ctl"));
-
-        // Remote setup: user, dirs, install, systemd
-        let setup = format!(
-            r#"set -e
-id {user} >/dev/null 2>&1 || useradd -r -m -d {home} -s /bin/bash {user}
-mkdir -p {prefix}/bin {home}/ctl {home}/run
-cp {tmp}/tt-ctl {prefix}/bin/tt-ctl
-cp {tmp}/tt {prefix}/bin/tt
-chmod 755 {prefix}/bin/tt-ctl {prefix}/bin/tt
-chown -R {user}:{user} {home}
-cat > /etc/systemd/system/tt-ctl.service <<'UNIT'
-{unit}
-UNIT
-systemctl daemon-reload
-systemctl enable tt-ctl
-systemctl restart tt-ctl
-rm -rf {tmp}
-echo "[deploy] tt-ctl deployed on {host}"
-"#,
-            user = user,
-            home = home,
-            prefix = prefix,
-            tmp = tmp,
-            host = ctl.host,
-            unit = systemd_unit(
-                "tt-ctl",
-                &format!(
-                    "{prefix}/bin/tt-ctl --listen {listen} --data-dir {data_dir}",
-                    prefix = prefix,
-                    listen = ctl.listen,
-                    data_dir = data_dir
-                ),
-                false
-            ),
+        let exec_cmd = format!(
+            "{prefix}/bin/tt-ctl --listen {listen} --data-dir {data_dir} --api-key {api_key}",
+            listen = ctl.listen,
         );
-        let out = target.exec(&setup).await?;
+
+        let script = remote_setup_script(
+            "tt-ctl",
+            &exec_cmd,
+            user,
+            &home,
+            prefix,
+            &tmp,
+            &["tt-ctl", "tt"],
+            &[format!("{home}/ctl").as_str()],
+            &ctl.host,
+        );
+        let out = target.exec(&script).await?;
         print!("{out}");
     }
 
@@ -466,8 +591,13 @@ echo "[deploy] tt-ctl deployed on {host}"
         let tmp = format!("/tmp/ttstack-deploy-{}", std::process::id());
         target.exec(&format!("mkdir -p {tmp}")).await?;
 
+        let agent_release = agent
+            .release_dir
+            .as_ref()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| release_dir.clone());
         target
-            .copy(&release_dir.join("tt-agent"), &format!("{tmp}/tt-agent"))
+            .copy(&agent_release.join("tt-agent"), &format!("{tmp}/tt-agent"))
             .await?;
         println!("[deploy] uploaded tt-agent");
 
@@ -481,51 +611,42 @@ echo "[deploy] tt-ctl deployed on {host}"
             .unwrap_or_else(|| format!("{home}/runtime"));
         let disk = parse_disk(&agent.disk_total);
 
-        let mut agent_cmd = format!(
+        let mut exec_cmd = format!(
             "{prefix}/bin/tt-agent --listen {listen} \
              --image-dir {image_dir} --runtime-dir {runtime_dir} \
              --data-dir {home}/data --storage {storage} \
              --cpu-total {cpu} --mem-total {mem} --disk-total {disk}",
-            prefix = prefix,
             listen = agent.listen,
             storage = agent.storage,
             cpu = agent.cpu_total,
             mem = agent.mem_total,
         );
         if let Some(hid) = &agent.host_id {
-            agent_cmd.push_str(&format!(" --host-id {hid}"));
+            exec_cmd.push_str(&format!(" --host-id {hid}"));
         }
 
-        let setup = format!(
-            r#"set -e
-id {user} >/dev/null 2>&1 || useradd -r -m -d {home} -s /bin/bash {user}
-mkdir -p {prefix}/bin {image_dir} {runtime_dir} {home}/data {home}/run
-cp {tmp}/tt-agent {prefix}/bin/tt-agent
-chmod 755 {prefix}/bin/tt-agent
-chown -R {user}:{user} {home}
-cat > /etc/systemd/system/tt-agent.service <<'UNIT'
-{unit}
-UNIT
-systemctl daemon-reload
-systemctl enable tt-agent
-systemctl restart tt-agent
-rm -rf {tmp}
-echo "[deploy] tt-agent deployed on {host}"
-"#,
-            user = user,
-            home = home,
-            prefix = prefix,
-            image_dir = image_dir,
-            runtime_dir = runtime_dir,
-            tmp = tmp,
-            host = agent.host,
-            unit = systemd_unit("tt-agent", &agent_cmd, true),
+        let script = remote_setup_script(
+            "tt-agent",
+            &exec_cmd,
+            user,
+            &home,
+            prefix,
+            &tmp,
+            &["tt-agent"],
+            &[image_dir.as_str(), runtime_dir.as_str()],
+            &agent.host,
         );
-        let out = target.exec(&setup).await?;
+        let out = target.exec(&script).await?;
         print!("{out}");
     }
 
     println!("\n[deploy] distributed deployment complete");
+    println!("[deploy] API key: {api_key}");
+    if let Some(ctl) = &cfg.controller {
+        println!("[deploy] Run: tt config {}:{} -k {api_key}",
+            ctl.host,
+            ctl.listen.rsplit(':').next().unwrap_or("9200"));
+    }
     Ok(())
 }
 
@@ -566,6 +687,7 @@ host = "10.0.0.2"
 [general]
 prefix = "/opt/tt"
 user = "myuser"
+api_key = "my-secret-key"
 
 [controller]
 host = "10.0.0.1"
@@ -586,10 +708,29 @@ host = "10.0.0.3"
 "#;
         let cfg: DeployConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(cfg.general.prefix, "/opt/tt");
+        assert_eq!(cfg.general.api_key.as_deref(), Some("my-secret-key"));
         assert!(cfg.controller.is_some());
         assert_eq!(cfg.agents.len(), 2);
         assert_eq!(cfg.agents[0].storage, "zfs");
         assert_eq!(cfg.agents[0].host_id.as_deref(), Some("node-a"));
         assert_eq!(parse_disk(&cfg.agents[0].disk_total), 1024000);
+    }
+
+    #[test]
+    fn remote_script_contains_sudo() {
+        let script = remote_setup_script(
+            "tt-agent",
+            "/opt/tt/bin/tt-agent --listen 0.0.0.0:9100",
+            "ttstack",
+            "/home/ttstack",
+            "/opt/tt",
+            "/tmp/deploy-1",
+            &["tt-agent"],
+            &["/home/ttstack/images"],
+            "testhost",
+        );
+        assert!(script.contains("sudo"));
+        assert!(script.contains("rc-service") || script.contains("systemctl"));
+        assert!(script.contains("adduser") || script.contains("useradd"));
     }
 }

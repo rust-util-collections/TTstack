@@ -1,7 +1,7 @@
 # TTstack distributed deployment configuration
 #
 # Copy to deploy.toml, edit to match your fleet, then run:
-#   ./tools/deploy.sh -c deploy.toml
+#   tt deploy dist deploy.toml
 #
 # All fields have sensible defaults — only [controller].host and
 # [[agents]].host are required. Everything else can be omitted.
@@ -14,6 +14,7 @@
 prefix      = "/opt/ttstack"     # Install path on all hosts
 user        = "ttstack"          # Runtime user (created if absent)
 release_dir = "./target/release" # Local path to compiled binaries
+# api_key   = "my-secret-key"   # API key for auth (auto-generated if omitted)
 
 # ── Controller ───────────────────────────────────────────────────────
 # One controller per fleet. Hosts the REST API and web dashboard.
