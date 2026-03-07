@@ -14,23 +14,42 @@ use ttcore::api::*;
 use ttcore::model::*;
 
 /// Shared controller state.
-pub type CtlState = Arc<Mutex<Db>>;
-
-/// Lock the DB mutex, recovering from poisoning if a prior
-/// handler panicked while holding the lock.
-fn lock_db(db: &CtlState) -> MutexGuard<'_, Db> {
-    db.lock().unwrap_or_else(|e| {
-        eprintln!("[ctl] WARN: db mutex was poisoned, recovering");
-        e.into_inner()
-    })
+pub struct CtlShared {
+    pub(crate) db: Mutex<Db>,
+    /// API key used for controller→agent communication.
+    pub api_key: Option<String>,
 }
 
-/// HTTP client for agent communication.
-fn agent_client() -> reqwest::Client {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .unwrap()
+impl CtlShared {
+    pub fn new(db: Db, api_key: Option<String>) -> Self {
+        Self {
+            db: Mutex::new(db),
+            api_key,
+        }
+    }
+
+    /// Lock the DB mutex, recovering from poisoning.
+    pub fn lock_db(&self) -> MutexGuard<'_, Db> {
+        self.db.lock().unwrap_or_else(|e| {
+            eprintln!("[ctl] WARN: db mutex was poisoned, recovering");
+            e.into_inner()
+        })
+    }
+}
+
+pub type CtlState = Arc<CtlShared>;
+
+/// HTTP client for agent communication, with optional Bearer auth.
+fn agent_client(api_key: Option<&str>) -> reqwest::Client {
+    let mut builder = reqwest::Client::builder().timeout(std::time::Duration::from_secs(30));
+    if let Some(key) = api_key {
+        let mut headers = reqwest::header::HeaderMap::new();
+        if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {key}")) {
+            headers.insert(reqwest::header::AUTHORIZATION, val);
+        }
+        builder = builder.default_headers(headers);
+    }
+    builder.build().unwrap()
 }
 
 // ── Host Management ─────────────────────────────────────────────────
@@ -40,7 +59,7 @@ pub async fn register_host(
     State(db): State<CtlState>,
     Json(req): Json<RegisterHostReq>,
 ) -> impl IntoResponse {
-    let client = agent_client();
+    let client = agent_client(db.api_key.as_deref());
     let url = format!("http://{}/api/info", req.addr);
 
     let resp = match client.get(&url).send().await {
@@ -76,7 +95,7 @@ pub async fn register_host(
         }
     };
 
-    let db = lock_db(&db);
+    let db = db.lock_db();
 
     if db.host_count().unwrap_or(0) >= MAX_HOSTS {
         return (
@@ -109,7 +128,7 @@ pub async fn register_host(
 
 /// GET /api/hosts
 pub async fn list_hosts(State(db): State<CtlState>) -> impl IntoResponse {
-    let db = lock_db(&db);
+    let db = db.lock_db();
     match db.list_hosts() {
         Ok(hosts) => Json(ApiResp::success(hosts)),
         Err(e) => Json(ApiResp::<Vec<Host>>::err(e.to_string())),
@@ -118,7 +137,7 @@ pub async fn list_hosts(State(db): State<CtlState>) -> impl IntoResponse {
 
 /// GET /api/hosts/:id
 pub async fn get_host(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
-    let db = lock_db(&db);
+    let db = db.lock_db();
     match db.get_host(&id) {
         Ok(Some(h)) => (StatusCode::OK, Json(ApiResp::success(h))),
         Ok(None) => (
@@ -134,7 +153,7 @@ pub async fn get_host(State(db): State<CtlState>, Path(id): Path<String>) -> imp
 
 /// DELETE /api/hosts/:id
 pub async fn remove_host(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
-    let db = lock_db(&db);
+    let db = db.lock_db();
 
     let vms = db.vms_by_host(&id).unwrap_or_default();
     if !vms.is_empty() {
@@ -184,7 +203,7 @@ pub async fn create_env(
 
     // Reserve the environment name under lock to prevent races
     let hosts = {
-        let db = lock_db(&db);
+        let db = db.lock_db();
 
         if let Ok(Some(_)) = db.get_env(&req.id) {
             return (
@@ -226,14 +245,14 @@ pub async fn create_env(
     };
 
     // Fetch available images from all online hosts for scheduling validation
-    let client = agent_client();
+    let client = agent_client(db.api_key.as_deref());
     let host_images = fetch_host_images(&hosts, &client).await;
 
     let placements = match scheduler::schedule_env(&hosts, &req.vms, &host_images) {
         Ok(p) => p,
         Err(e) => {
             // Clean up the placeholder
-            let db = lock_db(&db);
+            let db = db.lock_db();
             let _ = db.remove_env(&req.id);
             return (
                 StatusCode::UNPROCESSABLE_ENTITY,
@@ -309,7 +328,7 @@ pub async fn create_env(
 
     if created_vms.is_empty() && !req.vms.is_empty() {
         // Clean up the placeholder
-        let db = lock_db(&db);
+        let db = db.lock_db();
         let _ = db.remove_env(&req.id);
         return (
             StatusCode::BAD_GATEWAY,
@@ -330,7 +349,7 @@ pub async fn create_env(
     };
 
     {
-        let db = lock_db(&db);
+        let db = db.lock_db();
         let _ = db.put_env(&env);
         for vm in &created_vms {
             let _ = db.put_vm(vm);
@@ -350,7 +369,7 @@ pub async fn create_env(
 
 /// GET /api/envs
 pub async fn list_envs(State(db): State<CtlState>) -> impl IntoResponse {
-    let db = lock_db(&db);
+    let db = db.lock_db();
     match db.list_envs() {
         Ok(envs) => Json(ApiResp::success(envs)),
         Err(e) => Json(ApiResp::<Vec<Env>>::err(e.to_string())),
@@ -359,7 +378,7 @@ pub async fn list_envs(State(db): State<CtlState>) -> impl IntoResponse {
 
 /// GET /api/envs/:id
 pub async fn get_env(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
-    let db = lock_db(&db);
+    let db = db.lock_db();
     match db.get_env(&id) {
         Ok(Some(env)) => {
             let vms = db.vms_by_env(&id).unwrap_or_default();
@@ -388,7 +407,7 @@ pub async fn get_env(State(db): State<CtlState>, Path(id): Path<String>) -> impl
 /// DELETE /api/envs/:id
 pub async fn delete_env(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
     let (vms, hosts) = {
-        let db = lock_db(&db);
+        let db = db.lock_db();
         match db.get_env(&id) {
             Ok(Some(_)) => {}
             Ok(None) => {
@@ -409,7 +428,7 @@ pub async fn delete_env(State(db): State<CtlState>, Path(id): Path<String>) -> i
         (vms, hosts)
     };
 
-    let client = agent_client();
+    let client = agent_client(db.api_key.as_deref());
     for vm in &vms {
         if let Some(host) = hosts.iter().find(|h| h.id == vm.host_id) {
             let url = format!("http://{}/api/vms/{}", host.addr, vm.id);
@@ -434,7 +453,7 @@ pub async fn delete_env(State(db): State<CtlState>, Path(id): Path<String>) -> i
     }
 
     {
-        let db = lock_db(&db);
+        let db = db.lock_db();
         for vm in &vms {
             let _ = db.remove_vm(&vm.id);
         }
@@ -447,7 +466,7 @@ pub async fn delete_env(State(db): State<CtlState>, Path(id): Path<String>) -> i
 /// POST /api/envs/:id/stop
 pub async fn stop_env(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
     let (mut env, vms, hosts) = {
-        let db = lock_db(&db);
+        let db = db.lock_db();
         let env = match db.get_env(&id) {
             Ok(Some(e)) => e,
             _ => {
@@ -462,7 +481,7 @@ pub async fn stop_env(State(db): State<CtlState>, Path(id): Path<String>) -> imp
         (env, vms, hosts)
     };
 
-    let client = agent_client();
+    let client = agent_client(db.api_key.as_deref());
     for vm in &vms {
         if let Some(host) = hosts.iter().find(|h| h.id == vm.host_id) {
             let url = format!("http://{}/api/vms/{}/stop", host.addr, vm.id);
@@ -489,7 +508,7 @@ pub async fn stop_env(State(db): State<CtlState>, Path(id): Path<String>) -> imp
     }
 
     env.state = EnvState::Stopped;
-    let db = lock_db(&db);
+    let db = db.lock_db();
     let _ = db.put_env(&env);
 
     (StatusCode::OK, Json(ApiRespEmpty::ok()))
@@ -498,7 +517,7 @@ pub async fn stop_env(State(db): State<CtlState>, Path(id): Path<String>) -> imp
 /// POST /api/envs/:id/start
 pub async fn start_env(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
     let (mut env, vms, hosts) = {
-        let db = lock_db(&db);
+        let db = db.lock_db();
         let env = match db.get_env(&id) {
             Ok(Some(e)) => e,
             _ => {
@@ -513,7 +532,7 @@ pub async fn start_env(State(db): State<CtlState>, Path(id): Path<String>) -> im
         (env, vms, hosts)
     };
 
-    let client = agent_client();
+    let client = agent_client(db.api_key.as_deref());
     for vm in &vms {
         if let Some(host) = hosts.iter().find(|h| h.id == vm.host_id) {
             let url = format!("http://{}/api/vms/{}/start", host.addr, vm.id);
@@ -540,7 +559,7 @@ pub async fn start_env(State(db): State<CtlState>, Path(id): Path<String>) -> im
     }
 
     env.state = EnvState::Active;
-    let db = lock_db(&db);
+    let db = db.lock_db();
     let _ = db.put_env(&env);
 
     (StatusCode::OK, Json(ApiRespEmpty::ok()))
@@ -551,11 +570,11 @@ pub async fn start_env(State(db): State<CtlState>, Path(id): Path<String>) -> im
 /// GET /api/images
 pub async fn list_images(State(db): State<CtlState>) -> impl IntoResponse {
     let hosts = {
-        let db = lock_db(&db);
+        let db = db.lock_db();
         db.list_hosts().unwrap_or_default()
     };
 
-    let client = agent_client();
+    let client = agent_client(db.api_key.as_deref());
     let mut images = Vec::new();
 
     for host in &hosts {
@@ -583,10 +602,10 @@ pub async fn list_images(State(db): State<CtlState>) -> impl IntoResponse {
 
 /// GET /api/status
 pub async fn fleet_status(State(db): State<CtlState>) -> impl IntoResponse {
-    let client = agent_client();
+    let client = agent_client(db.api_key.as_deref());
     refresh_all_hosts(&db, &client).await;
 
-    let db = lock_db(&db);
+    let db = db.lock_db();
     match db.fleet_status() {
         Ok(s) => Json(ApiResp::success(s)),
         Err(e) => Json(ApiResp::<FleetStatus>::err(e.to_string())),
@@ -597,7 +616,7 @@ pub async fn fleet_status(State(db): State<CtlState>) -> impl IntoResponse {
 
 /// GET /api/vms/:id — get a single VM by ID (across all hosts).
 pub async fn get_vm(State(db): State<CtlState>, Path(id): Path<String>) -> impl IntoResponse {
-    let db = lock_db(&db);
+    let db = db.lock_db();
     match db.get_vm(&id) {
         Ok(Some(vm)) => (StatusCode::OK, Json(ApiResp::success(vm))),
         Ok(None) => (
@@ -648,7 +667,7 @@ async fn refresh_vm(state: &CtlState, client: &reqwest::Client, host: &Host, vm_
         && let Ok(body) = resp.json::<ApiResp<Vm>>().await
         && let Some(vm) = body.data
     {
-        let db = lock_db(state);
+        let db = state.lock_db();
         let _ = db.put_vm(&vm);
     }
 }
@@ -656,7 +675,7 @@ async fn refresh_vm(state: &CtlState, client: &reqwest::Client, host: &Host, vm_
 /// Refresh resource snapshots for all hosts from their agents.
 pub async fn refresh_all_hosts(state: &CtlState, client: &reqwest::Client) {
     let hosts = {
-        let db = lock_db(state);
+        let db = state.lock_db();
         db.list_hosts().unwrap_or_default()
     };
 
@@ -678,7 +697,7 @@ pub async fn refresh_all_hosts(state: &CtlState, client: &reqwest::Client) {
             }
         }
 
-        let db = lock_db(state);
+        let db = state.lock_db();
         let _ = db.put_host(&updated);
     }
 }

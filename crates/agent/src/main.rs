@@ -2,10 +2,13 @@
 //!
 //! The agent runs on each physical host, managing local VMs/containers
 //! and exposing an HTTP API for the central controller.
+//!
+//! Supported platforms:
+//! - **Linux**: all engines (Qemu, Firecracker, Docker)
+//! - **FreeBSD**: Bhyve, Jail
+//! - **Other Unix** (macOS, etc.): Docker/Podman only
 
-#[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
-compile_error!("tt-agent only supports Linux and FreeBSD");
-
+mod auth;
 mod config;
 mod handler;
 mod runtime;
@@ -67,6 +70,14 @@ async fn main() {
         .route("/api/vms/{id}/stop", post(handler::stop_vm))
         .route("/api/vms/{id}/start", post(handler::start_vm))
         .with_state(state);
+
+    let app = if let Some(key) = cfg.api_key {
+        eprintln!("API key authentication enabled");
+        app.layer(axum::middleware::from_fn(auth::make_auth_layer(key)))
+    } else {
+        eprintln!("WARNING: no --api-key set, all agent endpoints are unauthenticated!");
+        app
+    };
 
     let listener = tokio::net::TcpListener::bind(&cfg.listen)
         .await

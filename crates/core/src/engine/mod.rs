@@ -9,7 +9,6 @@
 
 #[cfg(target_os = "freebsd")]
 pub mod bhyve;
-#[cfg(target_os = "linux")]
 pub mod docker;
 #[cfg(target_os = "linux")]
 pub mod firecracker;
@@ -52,7 +51,6 @@ pub fn create_engine(kind: Engine) -> Box<dyn VmEngine> {
         Engine::Qemu => Box::new(qemu::QemuEngine::new()),
         #[cfg(target_os = "linux")]
         Engine::Firecracker => Box::new(firecracker::FirecrackerEngine::new()),
-        #[cfg(target_os = "linux")]
         Engine::Docker => Box::new(docker::DockerEngine::new()),
         #[cfg(target_os = "freebsd")]
         Engine::Bhyve => Box::new(bhyve::BhyveEngine::new()),

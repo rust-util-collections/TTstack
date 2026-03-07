@@ -62,6 +62,7 @@ impl Runtime {
                 if vm.engine != Engine::Docker {
                     let _ = storage::create_store(storage)
                         .remove_image(&format!("{}/clone-{}", runtime_dir, vm.id));
+                    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
                     net::destroy_tap(&vm.id).unwrap_or(());
                 }
                 let _ = delete_vm(&db, &vm.id);
@@ -98,11 +99,15 @@ impl Runtime {
             ..resource
         };
 
-        // Set up networking
-        net::setup_bridge().c(d!("bridge setup"))?;
-        net::setup_nat().c(d!("NAT setup"))?;
+        // Set up networking (only on platforms with host-managed networking)
+        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+        {
+            net::setup_bridge().c(d!("bridge setup"))?;
+            net::setup_nat().c(d!("NAT setup"))?;
+        }
 
         // Restore network rules for persisted VMs
+        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
         for vm in &vms {
             if vm.state == VmState::Running || vm.state == VmState::Paused {
                 if let Err(e) = net::create_tap(&vm.id, &vm.ip) {
@@ -175,7 +180,11 @@ impl Runtime {
 
         // Docker/Podman manages its own images, networking, and port mapping;
         // other engines need local image clones, TAP devices, and nftables rules.
+        // Host-managed networking is only available on Linux and FreeBSD.
+        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
         let host_managed_net = req.engine != Engine::Docker;
+        #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+        let host_managed_net = false;
 
         let clone_path = format!("{}/clone-{}", self.runtime_dir, req.vm_id);
         if host_managed_net {
@@ -186,6 +195,7 @@ impl Runtime {
         }
 
         if host_managed_net {
+            #[cfg(any(target_os = "linux", target_os = "freebsd"))]
             net::create_tap(&req.vm_id, &ip).c(d!("TAP setup"))?;
         }
 
@@ -222,6 +232,7 @@ impl Runtime {
         if let Err(e) = eng.create(&vm, &clone_path) {
             if host_managed_net {
                 let _ = self.store.remove_image(&clone_path);
+                #[cfg(any(target_os = "linux", target_os = "freebsd"))]
                 net::destroy_tap(&req.vm_id).unwrap_or(());
             }
             delete_vm(&self.db, &vm.id)?;
@@ -230,6 +241,7 @@ impl Runtime {
 
         // Set up nftables port forwarding and outgoing rules for non-Docker engines.
         // Docker handles port publishing via its own -p flag.
+        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
         if host_managed_net {
             let post_create = || -> Result<()> {
                 for (&guest_port, &host_port) in &port_map {
@@ -330,11 +342,18 @@ impl Runtime {
 
         // Only clean up host-managed networking for non-Docker engines;
         // Docker handles its own network teardown.
+        #[cfg(any(target_os = "linux", target_os = "freebsd"))]
         if vm.engine != Engine::Docker {
             net::remove_port_forwards(&vm.ip).unwrap_or(());
             net::allow_outgoing(&vm.ip).unwrap_or(());
             net::destroy_tap(vm_id).unwrap_or(());
 
+            let clone_path = format!("{}/clone-{}", self.runtime_dir, vm_id);
+            let _ = self.store.remove_image(&clone_path);
+        }
+
+        #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+        if vm.engine != Engine::Docker {
             let clone_path = format!("{}/clone-{}", self.runtime_dir, vm_id);
             let _ = self.store.remove_image(&clone_path);
         }
@@ -561,9 +580,6 @@ fn detect_engines() -> Vec<Engine> {
         if which("firecracker") {
             engines.push(Engine::Firecracker);
         }
-        if which("docker") || which("podman") {
-            engines.push(Engine::Docker);
-        }
     }
 
     #[cfg(target_os = "freebsd")]
@@ -574,6 +590,11 @@ fn detect_engines() -> Vec<Engine> {
         if which("jail") {
             engines.push(Engine::Jail);
         }
+    }
+
+    // Docker/Podman is available on all platforms
+    if which("docker") || which("podman") {
+        engines.push(Engine::Docker);
     }
 
     engines

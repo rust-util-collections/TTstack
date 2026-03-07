@@ -16,7 +16,7 @@ use clap::Parser;
 use config::Config;
 use db::Db;
 use handler::CtlState;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
@@ -33,7 +33,7 @@ async fn main() {
         std::process::exit(1);
     });
 
-    let state: CtlState = Arc::new(Mutex::new(db));
+    let state: CtlState = Arc::new(handler::CtlShared::new(db, cfg.api_key.clone()));
 
     // Background task: expire old environments
     let expiry_state = state.clone();
@@ -47,8 +47,15 @@ async fn main() {
     // Background task: periodic host health check
     let heartbeat_state = state.clone();
     tokio::spawn(async move {
+        let mut headers = reqwest::header::HeaderMap::new();
+        if let Some(key) = &heartbeat_state.api_key {
+            if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {key}")) {
+                headers.insert(reqwest::header::AUTHORIZATION, val);
+            }
+        }
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
+            .default_headers(headers)
             .build()
             .unwrap();
         loop {
@@ -59,6 +66,8 @@ async fn main() {
 
     if cfg.api_key.is_some() {
         eprintln!("API key authentication enabled");
+    } else {
+        eprintln!("WARNING: no --api-key set, all API endpoints are unauthenticated!");
     }
 
     let api_routes = Router::new()
@@ -85,14 +94,15 @@ async fn main() {
         .route("/api/status", get(handler::fleet_status))
         .with_state(state);
 
-    let api_routes = if let Some(key) = cfg.api_key {
-        api_routes.layer(axum::middleware::from_fn(auth::make_auth_layer(key)))
+    let api_routes = if let Some(ref key) = cfg.api_key {
+        api_routes.layer(axum::middleware::from_fn(auth::make_auth_layer(
+            key.clone(),
+        )))
     } else {
         api_routes
     };
 
     let app = Router::new()
-        // Web dashboard (no auth required)
         .route("/", get(web::index))
         .merge(api_routes);
 
@@ -129,7 +139,7 @@ async fn expire_envs(state: &CtlState) {
         .as_secs();
 
     let expired = {
-        let db = state.lock().unwrap_or_else(|e| e.into_inner());
+        let db = state.lock_db();
         db.list_envs()
             .unwrap_or_default()
             .into_iter()
@@ -138,8 +148,15 @@ async fn expire_envs(state: &CtlState) {
             .collect::<Vec<_>>()
     };
 
+    let mut headers = reqwest::header::HeaderMap::new();
+    if let Some(key) = &state.api_key {
+        if let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {key}")) {
+            headers.insert(reqwest::header::AUTHORIZATION, val);
+        }
+    }
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
+        .default_headers(headers)
         .build()
         .unwrap();
 
@@ -147,7 +164,7 @@ async fn expire_envs(state: &CtlState) {
         eprintln!("expiring environment: {env_id}");
 
         let (vms, hosts) = {
-            let db = state.lock().unwrap_or_else(|e| e.into_inner());
+            let db = state.lock_db();
             let vms = db.vms_by_env(&env_id).unwrap_or_default();
             let hosts = db.list_hosts().unwrap_or_default();
             (vms, hosts)
@@ -199,7 +216,7 @@ async fn expire_envs(state: &CtlState) {
             }
         }
 
-        let db = state.lock().unwrap_or_else(|e| e.into_inner());
+        let db = state.lock_db();
         for vm in &vms {
             let _ = db.remove_vm(&vm.id);
         }

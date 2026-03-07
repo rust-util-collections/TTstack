@@ -144,7 +144,17 @@ pub fn save_config(addr: &str, api_key: Option<&str>) -> Result<()> {
         Some(key) => format!("{addr}\n{key}\n"),
         None => format!("{addr}\n"),
     };
-    std::fs::write(&path, content).c(d!("save config"))
+    std::fs::write(&path, &content).c(d!("save config"))?;
+
+    // Restrict file permissions to owner-only (0600)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::Permissions::from_mode(0o600);
+        let _ = std::fs::set_permissions(&path, perms);
+    }
+
+    Ok(())
 }
 
 fn dirs_path() -> String {

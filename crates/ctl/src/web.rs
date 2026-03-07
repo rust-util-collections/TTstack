@@ -6,6 +6,10 @@
 use axum::response::Html;
 
 /// GET / — serve the management dashboard.
+///
+/// The page itself requires no authentication. When API key auth is
+/// enabled, the JS client detects 401 responses and prompts the user
+/// to enter the key (stored in sessionStorage).
 pub async fn index() -> Html<&'static str> {
     Html(FRONTEND_HTML)
 }
@@ -225,6 +229,9 @@ const API = '';
 let refreshTimer = null;
 let currentTab = 'status';
 
+function getApiKey() { return sessionStorage.getItem('tt_api_key'); }
+function setApiKey(k) { sessionStorage.setItem('tt_api_key', k); }
+
 // HTML-escape to prevent XSS
 function esc(s) {
   if (s == null) return '';
@@ -235,8 +242,15 @@ function esc(s) {
 
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  const key = getApiKey();
+  if (key) opts.headers['Authorization'] = 'Bearer ' + key;
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(API + path, opts);
+  if (res.status === 401) {
+    const k = prompt('API key required:');
+    if (k) { setApiKey(k); return api(method, path, body); }
+    throw new Error('Authentication required');
+  }
   const data = await res.json();
   if (!data.ok) throw new Error(data.error || 'Request failed');
   return data.data;

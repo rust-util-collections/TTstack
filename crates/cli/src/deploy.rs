@@ -47,15 +47,10 @@ impl Default for GeneralConfig {
 }
 
 fn generate_api_key() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let seed = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
     format!(
-        "tt-{:016x}{:016x}",
-        seed,
-        seed.wrapping_mul(6364136223846793005)
+        "tt-{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
     )
 }
 
@@ -488,6 +483,7 @@ pub async fn deploy_local(role: &str, release_dir: &str) -> Result<()> {
     local_ensure_dirs(home, user).await?;
 
     let release = PathBuf::from(release_dir);
+    let api_key = generate_api_key();
 
     match role {
         "agent" | "all" => {
@@ -503,7 +499,7 @@ pub async fn deploy_local(role: &str, release_dir: &str) -> Result<()> {
             let cmd = format!(
                 "{prefix}/bin/tt-agent --listen 0.0.0.0:9100 \
                  --image-dir {home}/images --runtime-dir {home}/runtime \
-                 --data-dir {home}/data --storage raw"
+                 --data-dir {home}/data --storage raw --api-key {api_key}"
             );
             local_install_systemd("tt-agent", &cmd, true).await?;
             local_restart_service("tt-agent").await?;
@@ -521,7 +517,6 @@ pub async fn deploy_local(role: &str, release_dir: &str) -> Result<()> {
                 local_install_bin(&bin, prefix).await?;
             }
 
-            let api_key = generate_api_key();
             let cmd = format!(
                 "{prefix}/bin/tt-ctl --listen 0.0.0.0:9200 --data-dir {home}/ctl --api-key {api_key}"
             );
@@ -650,6 +645,7 @@ pub async fn deploy_distributed(config_path: &str) -> Result<()> {
         if let Some(hid) = &agent.host_id {
             exec_cmd.push_str(&format!(" --host-id {hid}"));
         }
+        exec_cmd.push_str(&format!(" --api-key {api_key}"));
 
         let script = remote_setup_script(
             "tt-agent",

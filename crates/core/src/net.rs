@@ -8,7 +8,9 @@
 //! **Linux**: uses `ip`, `nftables`
 //! **FreeBSD**: uses `ifconfig`, `pf`
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 use ruc::*;
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 use std::process::Command;
 
 /// Default bridge name on each host.
@@ -377,34 +379,42 @@ mod platform {
 // Public re-exports (dispatches to platform module)
 // ═══════════════════════════════════════════════════════════════════
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 pub fn setup_bridge() -> Result<()> {
     platform::setup_bridge()
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 pub fn setup_nat() -> Result<()> {
     platform::setup_nat()
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 pub fn create_tap(vm_id: &str, _vm_ip_addr: &str) -> Result<()> {
     platform::create_tap(vm_id)
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 pub fn destroy_tap(vm_id: &str) -> Result<()> {
     platform::destroy_tap(vm_id)
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 pub fn add_port_forward(host_port: u16, vm_ip_addr: &str, guest_port: u16) -> Result<()> {
     platform::add_port_forward(host_port, vm_ip_addr, guest_port)
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 pub fn remove_port_forwards(vm_ip_addr: &str) -> Result<()> {
     platform::remove_port_forwards(vm_ip_addr)
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 pub fn deny_outgoing(vm_ip_addr: &str) -> Result<()> {
     platform::deny_outgoing(vm_ip_addr)
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 pub fn allow_outgoing(vm_ip_addr: &str) -> Result<()> {
     platform::allow_outgoing(vm_ip_addr)
 }

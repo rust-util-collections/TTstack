@@ -10,11 +10,9 @@
 //! on Linux and FreeBSD where the agent daemon runs.
 
 pub mod api;
+pub mod auth;
 pub mod model;
 
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 pub mod engine;
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 pub mod net;
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 pub mod storage;
