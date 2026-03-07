@@ -50,7 +50,13 @@ impl DockerEngine {
 }
 
 impl VmEngine for DockerEngine {
-    fn create(&self, vm: &Vm, _image_path: &str) -> Result<()> {
+    fn create(
+        &self,
+        vm: &Vm,
+        _image_path: &str,
+        _disk_format: &str,
+        _ssh_keys: &[String],
+    ) -> Result<()> {
         let name = Self::container_name(vm);
         let rt = Self::runtime();
 

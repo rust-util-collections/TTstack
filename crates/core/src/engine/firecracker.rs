@@ -70,7 +70,13 @@ impl FirecrackerEngine {
 }
 
 impl VmEngine for FirecrackerEngine {
-    fn create(&self, vm: &Vm, image_path: &str) -> Result<()> {
+    fn create(
+        &self,
+        vm: &Vm,
+        image_path: &str,
+        _disk_format: &str,
+        _ssh_keys: &[String],
+    ) -> Result<()> {
         std::fs::create_dir_all(RUN_DIR).c(d!("create runtime dir"))?;
 
         self.write_config(vm, image_path)?;

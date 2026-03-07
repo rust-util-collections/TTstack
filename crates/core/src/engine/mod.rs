@@ -22,8 +22,17 @@ use ruc::*;
 
 /// Trait implemented by each hypervisor / container engine.
 pub trait VmEngine: Send + Sync {
-    /// Create and boot a new VM from the given image path.
-    fn create(&self, vm: &Vm, image_path: &str) -> Result<()>;
+    /// Create and boot a new VM from the given disk path.
+    ///
+    /// - `disk_format`: image format (`"qcow2"` for file-based, `"raw"` for zvol).
+    /// - `ssh_keys`: public keys to inject for tenant SSH access.
+    fn create(
+        &self,
+        vm: &Vm,
+        image_path: &str,
+        disk_format: &str,
+        ssh_keys: &[String],
+    ) -> Result<()>;
 
     /// Start a previously stopped VM.
     fn start(&self, vm: &Vm) -> Result<()>;

@@ -150,7 +150,7 @@ mod tests {
             },
             state: HostState::Online,
             engines,
-            storage: Storage::Raw,
+            storage: Storage::File,
             registered_at: 0,
         }
     }
@@ -164,6 +164,7 @@ mod tests {
             disk: Some(40960),
             ports: vec![22],
             deny_outgoing: false,
+            ssh_keys: vec![],
         }
     }
 

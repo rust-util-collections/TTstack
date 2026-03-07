@@ -35,7 +35,7 @@ host     = "10.0.0.1"           # REQUIRED — controller IP or hostname
 #   disk_total = "200G"   → 200 GiB   (unit: MiB, or string with G suffix)
 #
 # Storage defaults:
-#   storage     = "raw"   → plain file copy (also: "zfs", "btrfs")
+#   storage     = "file"  → plain qcow2, FS-agnostic (also: "zvol")
 #   image_dir   = "/home/<user>/images"
 #   runtime_dir = "/home/<user>/runtime"
 
@@ -61,7 +61,7 @@ host = "10.0.0.2"               # REQUIRED — agent IP or hostname
 #                              # Examples: 204800, "200G", "500G"
 
 # ── Storage ──────────────────────────────────────────────────────────
-# storage = "raw"              # "raw", "zfs", or "btrfs"
+# storage = "file"             # "file" or "zvol"
 #
 # Where base images are stored:
 # image_dir = "/home/ttstack/images"
@@ -69,15 +69,10 @@ host = "10.0.0.2"               # REQUIRED — agent IP or hostname
 # Where runtime VM clones are created:
 # runtime_dir = "/home/ttstack/runtime"
 #
-# For ZFS: use dataset paths instead of filesystem paths:
-#   storage     = "zfs"
+# For Zvol: use ZFS dataset paths (zvols exposed as /dev/zvol/...):
+#   storage     = "zvol"
 #   image_dir   = "tank/ttstack/images"
 #   runtime_dir = "tank/ttstack/runtime"
-#
-# For Btrfs: use paths on a Btrfs mount:
-#   storage     = "btrfs"
-#   image_dir   = "/mnt/btrfs/ttstack/images"
-#   runtime_dir = "/mnt/btrfs/ttstack/runtime"
 #
 # Multiple disk paths — comma-separated for images spread across disks:
 #   image_dir = "/data1/images,/data2/images"
@@ -87,34 +82,23 @@ host = "10.0.0.2"               # REQUIRED — agent IP or hostname
 # [[agents]]
 # host = "10.0.0.3"
 
-# ── Example: ZFS-backed high-spec node ───────────────────────────────
+# ── Example: Zvol-backed high-spec node ──────────────────────────────
 
 [[agents]]
 host        = "10.0.0.3"
-host_id     = "zfs-node"
-storage     = "zfs"
+host_id     = "zvol-node"
+storage     = "zvol"
 image_dir   = "tank/ttstack/images"
 runtime_dir = "tank/ttstack/runtime"
 cpu_total   = 32               # 32 cores
 mem_total   = 65536            # 64 GiB
 disk_total  = "1000G"          # ~1 TiB
 
-# ── Example: Btrfs node with NVMe storage ────────────────────────────
-
-# [[agents]]
-# host        = "10.0.0.4"
-# storage     = "btrfs"
-# image_dir   = "/mnt/nvme/ttstack/images"
-# runtime_dir = "/mnt/nvme/ttstack/runtime"
-# cpu_total   = 16
-# mem_total   = 32768          # 32 GiB
-# disk_total  = "500G"
-
-# ── Example: multi-disk raw node ─────────────────────────────────────
+# ── Example: multi-disk file node ─────────────────────────────────────
 
 # [[agents]]
 # host        = "10.0.0.5"
-# storage     = "raw"
+# storage     = "file"
 # image_dir   = "/data1/images,/data2/images"
 # runtime_dir = "/data1/runtime"
 # cpu_total   = 8

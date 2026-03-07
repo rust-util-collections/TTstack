@@ -17,6 +17,9 @@ pub struct CreateVmReq {
     pub disk: u32,
     pub ports: Vec<u16>,
     pub deny_outgoing: bool,
+    /// SSH public keys to inject into the VM for tenant access.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ssh_keys: Vec<String>,
 }
 
 /// Response from agent after creating a VM.
@@ -50,6 +53,9 @@ pub struct VmSpec {
     pub ports: Vec<u16>,
     #[serde(default)]
     pub deny_outgoing: bool,
+    /// Per-VM SSH keys (merged with env-level keys).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ssh_keys: Vec<String>,
 }
 
 fn default_engine() -> Engine {
@@ -64,6 +70,9 @@ pub struct CreateEnvReq {
     pub vms: Vec<VmSpec>,
     /// Lifetime in seconds; `None` means use server default.
     pub lifetime: Option<u64>,
+    /// SSH public keys applied to all VMs in this environment.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ssh_keys: Vec<String>,
 }
 
 /// Full environment details returned to the CLI.

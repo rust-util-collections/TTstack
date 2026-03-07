@@ -29,13 +29,40 @@ impl JailEngine {
 }
 
 impl VmEngine for JailEngine {
-    fn create(&self, vm: &Vm, image_path: &str) -> Result<()> {
+    fn create(
+        &self,
+        vm: &Vm,
+        image_path: &str,
+        _disk_format: &str,
+        ssh_keys: &[String],
+    ) -> Result<()> {
         let name = Self::jail_name(vm);
 
         // jail requires an absolute path for mount.devfs
         let abs_path = Path::new(image_path)
             .canonicalize()
             .c(d!("canonicalize jail path"))?;
+
+        // Inject SSH keys into the jail rootfs before starting
+        if !ssh_keys.is_empty() {
+            let ssh_dir = abs_path.join("root/.ssh");
+            std::fs::create_dir_all(&ssh_dir).c(d!("create .ssh dir in jail"))?;
+            let ak = ssh_keys.join("\n") + "\n";
+            std::fs::write(ssh_dir.join("authorized_keys"), ak)
+                .c(d!("write authorized_keys in jail"))?;
+            // Ensure correct permissions (readable only by owner)
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&ssh_dir, std::fs::Permissions::from_mode(0o700))
+                    .unwrap_or(());
+                std::fs::set_permissions(
+                    ssh_dir.join("authorized_keys"),
+                    std::fs::Permissions::from_mode(0o600),
+                )
+                .unwrap_or(());
+            }
+        }
 
         // Create the jail with the given root filesystem
         let output = Command::new("jail")

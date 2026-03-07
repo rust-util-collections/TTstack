@@ -16,12 +16,12 @@ not yet verified in CI or lab environments).
 
 | Host OS | Version | Status | Storage Backends | Engines | Notes |
 |---------|---------|--------|-----------------|---------|-------|
-| Debian | 13 (Trixie) | **Tested** | raw, ZFS, Btrfs | QEMU/KVM, Firecracker, Docker | Primary development platform |
-| Alpine Linux | 3.23 | **Tested** | raw | QEMU/KVM, Docker | Requires `iproute2`, `nftables`, `socat`, `qemu-system-x86_64`; BusyBox `ip` is not sufficient |
-| Ubuntu | 24.04 LTS | Planned | raw, ZFS, Btrfs | QEMU/KVM, Firecracker, Docker | Debian-derivative; expected full compatibility |
-| Rocky Linux | 10.x | Planned | raw, ZFS, Btrfs | QEMU/KVM, Firecracker, Docker/Podman | RHEL-derivative; nftables is the default firewall backend |
-| Gentoo | 23.0 | Planned | raw, ZFS, Btrfs | QEMU/KVM, Firecracker, Docker | Requires manual package installation |
-| FreeBSD | 14.3 | **Tested** | raw, ZFS | Bhyve, Jail | Uses PF instead of nftables; clang from base system |
+| Debian | 13 (Trixie) | **Tested** | file, zvol | QEMU/KVM, Firecracker, Docker | Primary development platform |
+| Alpine Linux | 3.23 | **Tested** | file | QEMU/KVM, Docker | Requires `iproute2`, `nftables`, `socat`, `qemu-system-x86_64`; BusyBox `ip` is not sufficient |
+| Ubuntu | 24.04 LTS | Planned | file, zvol | QEMU/KVM, Firecracker, Docker | Debian-derivative; expected full compatibility |
+| Rocky Linux | 10.x | Planned | file, zvol | QEMU/KVM, Firecracker, Docker/Podman | RHEL-derivative; nftables is the default firewall backend |
+| Gentoo | 23.0 | Planned | file, zvol | QEMU/KVM, Firecracker, Docker | Requires manual package installation |
+| FreeBSD | 14.3 | **Tested** | file, zvol | Bhyve, Jail | Uses PF instead of nftables; clang from base system |
 
 ### Host OS Requirements
 
@@ -52,9 +52,8 @@ FreeBSD hosts require:
 
 | Backend | Host Requirements | Performance | Notes |
 |---------|------------------|-------------|-------|
-| raw | Any filesystem | Baseline | Linux: `cp --reflink=auto` for CoW; FreeBSD: `cp -a` |
-| ZFS | ZFS pool mounted | Fast (instant clone) | Requires `zfs` CLI; images stored as datasets |
-| Btrfs | Btrfs filesystem mounted | Fast (snapshot clone) | Requires `btrfs` CLI; images stored as subvolumes |
+| file | Any filesystem | Baseline | Linux: `cp --reflink=auto` for CoW; FreeBSD: `cp -a` |
+| zvol | ZFS pool mounted | Fast (instant clone) | Requires `zfs` CLI; images stored as zvols (raw block devices at `/dev/zvol/...`) |
 
 ### Tested Host Configurations
 
@@ -67,11 +66,11 @@ The following configurations have been verified in practice:
 - **QEMU**: 10.0.7 with KVM acceleration
 - **Firecracker**: Tested with fc-alpine image
 - **Docker**: 26.1.5
-- **Storage**: raw (default), ZFS (pool `ttpool`), Btrfs (`/mnt/btrfs-tt`)
+- **Storage**: file (default), zvol (pool `ttpool`)
 - **Networking**: nftables with tt-nat table, bridge `tt0`
 
 **Test results**:
-- All three storage backends (raw, ZFS, Btrfs): VM create/destroy with proper clone/snapshot lifecycle
+- All storage backends (file, zvol): VM create/destroy with proper clone/snapshot lifecycle
 - QEMU engine: Full lifecycle (create → run → pause → resume → destroy)
 - Firecracker engine: Full lifecycle (create → run → pause → destroy)
 - Docker engine: Full lifecycle (create → run → stop → start → destroy) with native port mapping
@@ -85,7 +84,7 @@ The following configurations have been verified in practice:
 - **CPU**: 128 cores, **RAM**: 252 GiB
 - **QEMU**: 10.1.3 with KVM acceleration
 - **Docker**: 29.1.3
-- **Storage**: raw
+- **Storage**: file
 - **Networking**: nftables + iproute2 (required; BusyBox `ip` is insufficient)
 
 **Required packages** (beyond base install):
@@ -104,7 +103,7 @@ modprobe tun  # if /dev/net/tun is missing
 - **Kernel**: 14.3-RELEASE GENERIC
 - **Clang**: 19.1.7 (from base system)
 - **Rust**: 1.92.0 (from pkg)
-- **Storage**: raw
+- **Storage**: file
 - **Engines detected**: bhyve, jail
 
 **Test results**:
@@ -173,7 +172,7 @@ last 3 years):
 
 **Guest image requirements**:
 - Format: qcow2 (recommended) or raw
-- For directory-based storage (ZFS/Btrfs): place the qcow2 file inside the dataset/subvolume directory
+- For directory-based storage (zvol): images are ZFS zvols exposed as raw block devices
 - The engine automatically resolves `disk.qcow2` inside directories
 
 #### Firecracker Guest Compatibility
@@ -256,7 +255,7 @@ FreeBSD 14.3 ships clang 19 in base — no additional compiler setup needed.
 |-----------|--------|---------|
 | Host OS | Debian 13, Alpine 3.23, FreeBSD 14.3 | Ubuntu 24.04, Rocky 10, Gentoo 23 |
 | VM engines | QEMU/KVM, Firecracker, Docker (Linux); Bhyve, Jail (FreeBSD) | — |
-| Storage backends | raw, ZFS, Btrfs | All verified on Debian 13 |
+| Storage backends | file, zvol | All verified on Debian 13 |
 | Multi-host | 3-host fleet (Debian + Alpine + FreeBSD) | Up to 50 hosts |
 | Guest OS (containers) | Alpine-based test images | Full OCI ecosystem |
 | Guest OS (VMs) | Minimal test images | See guest compatibility tables above |

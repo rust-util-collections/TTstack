@@ -59,12 +59,10 @@ impl Runtime {
                 );
                 let eng = engine::create_engine(vm.engine);
                 let _ = eng.destroy(vm);
-                if vm.engine != Engine::Docker {
-                    let _ = storage::create_store(storage)
-                        .remove_image(&format!("{}/clone-{}", runtime_dir, vm.id));
-                    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-                    net::destroy_tap(&vm.id).unwrap_or(());
-                }
+                let _ = storage::create_store(storage)
+                    .remove_image(&format!("{}/clone-{}", runtime_dir, vm.id));
+                #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+                net::destroy_tap(&vm.id).unwrap_or(());
                 let _ = delete_vm(&db, &vm.id);
             }
         }
@@ -200,9 +198,14 @@ impl Runtime {
         }
 
         // Allocate port mappings (use checked arithmetic to avoid u16 overflow)
+        // Always include port 22 for SSH access
+        let mut ports = req.ports.clone();
+        if !ports.contains(&22) {
+            ports.insert(0, 22);
+        }
         let mut port_map = BTreeMap::new();
         let base_port = 20000u32.saturating_add(ip_idx.saturating_mul(100));
-        for (i, &guest_port) in req.ports.iter().enumerate() {
+        for (i, &guest_port) in ports.iter().enumerate() {
             let host_port = base_port.saturating_add(i as u32);
             if host_port > 65535 {
                 break; // silently skip ports that can't be allocated
@@ -227,9 +230,13 @@ impl Runtime {
 
         save_vm(&self.db, &vm)?;
 
+        // Resolve the disk path and format from the storage backend
+        let disk_path = self.store.resolve_disk(&clone_path);
+        let disk_format = self.store.disk_format();
+
         // Launch using the appropriate engine
         let eng = engine::create_engine(req.engine);
-        if let Err(e) = eng.create(&vm, &clone_path) {
+        if let Err(e) = eng.create(&vm, &disk_path, disk_format, &req.ssh_keys) {
             if host_managed_net {
                 let _ = self.store.remove_image(&clone_path);
                 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
@@ -239,8 +246,7 @@ impl Runtime {
             return Err(e).c(d!("engine create"));
         }
 
-        // Set up nftables port forwarding and outgoing rules for non-Docker engines.
-        // Docker handles port publishing via its own -p flag.
+        // Set up nftables port forwarding and outgoing rules.
         #[cfg(any(target_os = "linux", target_os = "freebsd"))]
         if host_managed_net {
             let post_create = || -> Result<()> {
@@ -288,7 +294,7 @@ impl Runtime {
         let eng = engine::create_engine(vm.engine);
         eng.stop(&vm).c(d!("stop VM"))?;
 
-        // FC/QEMU pause (preserve process); Docker/Jail fully stop
+        // FC/QEMU pause (preserve process); others fully stop
         let pauses = matches!(vm.engine, Engine::Qemu | Engine::Firecracker);
         if pauses {
             vm.state = VmState::Paused;
@@ -340,19 +346,15 @@ impl Runtime {
         let eng = engine::create_engine(vm.engine);
         let _ = eng.destroy(&vm);
 
-        // Only clean up host-managed networking for non-Docker engines;
+        // Clean up host-managed networking and image clones.
         // Docker handles its own network teardown.
         #[cfg(any(target_os = "linux", target_os = "freebsd"))]
         if vm.engine != Engine::Docker {
             net::remove_port_forwards(&vm.ip).unwrap_or(());
             net::allow_outgoing(&vm.ip).unwrap_or(());
             net::destroy_tap(vm_id).unwrap_or(());
-
-            let clone_path = format!("{}/clone-{}", self.runtime_dir, vm_id);
-            let _ = self.store.remove_image(&clone_path);
         }
 
-        #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
         if vm.engine != Engine::Docker {
             let clone_path = format!("{}/clone-{}", self.runtime_dir, vm_id);
             let _ = self.store.remove_image(&clone_path);

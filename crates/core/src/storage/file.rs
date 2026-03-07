@@ -1,19 +1,17 @@
-//! Raw file storage backend.
+//! File-based storage backend.
 //!
-//! Uses plain file copies for image provisioning. Simplest backend,
-//! works on any filesystem, but slower and uses more disk space than
-//! ZFS or Btrfs snapshot-based approaches.
+//! Uses plain file/directory copies for image provisioning. Works on
+//! any filesystem. On Linux with CoW filesystems, `cp --reflink=auto`
+//! makes copies near-instant.
 
 use super::ImageStore;
 use ruc::*;
 use std::path::Path;
 
-pub struct RawStore;
+pub struct FileStore;
 
-impl ImageStore for RawStore {
+impl ImageStore for FileStore {
     fn clone_image(&self, base: &str, target: &str) -> Result<()> {
-        // Use cp to copy the image; on Linux, --reflink=auto enables CoW
-        // if supported. On FreeBSD, use -a (archive mode) without GNU flags.
         let mut cmd = std::process::Command::new("cp");
         #[cfg(target_os = "linux")]
         cmd.args(["--reflink=auto", "-a", base, target]);
@@ -61,8 +59,38 @@ impl ImageStore for RawStore {
         Ok(Path::new(path).exists())
     }
 
+    fn resolve_disk(&self, clone_path: &str) -> String {
+        let p = Path::new(clone_path);
+        if p.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(p) {
+                let files: Vec<_> = entries
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.path().is_file())
+                    .collect();
+                // Prefer .qcow2 file
+                if let Some(qcow2) = files
+                    .iter()
+                    .find(|f| f.path().extension().is_some_and(|ext| ext == "qcow2"))
+                {
+                    return qcow2.path().to_string_lossy().into_owned();
+                }
+                // Single file — use it directly
+                if files.len() == 1 {
+                    return files[0].path().to_string_lossy().into_owned();
+                }
+            }
+            format!("{clone_path}/disk.qcow2")
+        } else {
+            clone_path.to_string()
+        }
+    }
+
+    fn disk_format(&self) -> &'static str {
+        "qcow2"
+    }
+
     fn name(&self) -> &'static str {
-        "raw"
+        "file"
     }
 }
 
@@ -77,7 +105,7 @@ mod tests {
         let clone = dir.path().join("clone.img");
         std::fs::write(&base, b"image-data").unwrap();
 
-        let store = RawStore;
+        let store = FileStore;
         store
             .clone_image(base.to_str().unwrap(), clone.to_str().unwrap())
             .unwrap();
@@ -96,7 +124,7 @@ mod tests {
         std::fs::create_dir(&base_dir).unwrap();
         std::fs::write(base_dir.join("disk.qcow2"), b"data").unwrap();
 
-        let store = RawStore;
+        let store = FileStore;
         store
             .clone_image(base_dir.to_str().unwrap(), clone_dir.to_str().unwrap())
             .unwrap();
@@ -114,7 +142,7 @@ mod tests {
         std::fs::write(dir.path().join(".hidden"), b"").unwrap();
         std::fs::write(dir.path().join("clone-abc"), b"").unwrap();
 
-        let store = RawStore;
+        let store = FileStore;
         let images = store.list_images(dir.path().to_str().unwrap()).unwrap();
         assert_eq!(images, vec!["alpine", "ubuntu"]);
     }
@@ -122,14 +150,14 @@ mod tests {
     #[test]
     fn list_images_empty_dir() {
         let dir = tempfile::tempdir().unwrap();
-        let store = RawStore;
+        let store = FileStore;
         let images = store.list_images(dir.path().to_str().unwrap()).unwrap();
         assert!(images.is_empty());
     }
 
     #[test]
     fn list_images_nonexistent_dir() {
-        let store = RawStore;
+        let store = FileStore;
         let images = store.list_images("/no/such/path").unwrap();
         assert!(images.is_empty());
     }
@@ -138,7 +166,7 @@ mod tests {
     fn image_exists_check() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("img");
-        let store = RawStore;
+        let store = FileStore;
         assert!(!store.image_exists(path.to_str().unwrap()).unwrap());
         std::fs::write(&path, b"").unwrap();
         assert!(store.image_exists(path.to_str().unwrap()).unwrap());
@@ -146,12 +174,59 @@ mod tests {
 
     #[test]
     fn remove_nonexistent_is_ok() {
-        let store = RawStore;
+        let store = FileStore;
         store.remove_image("/no/such/file").unwrap();
     }
 
     #[test]
-    fn name_is_raw() {
-        assert_eq!(RawStore.name(), "raw");
+    fn name_is_file() {
+        assert_eq!(FileStore.name(), "file");
+    }
+
+    #[test]
+    fn disk_format_is_qcow2() {
+        assert_eq!(FileStore.disk_format(), "qcow2");
+    }
+
+    #[test]
+    fn resolve_disk_plain_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("image.qcow2");
+        std::fs::write(&file, b"fake").unwrap();
+        let resolved = FileStore.resolve_disk(file.to_str().unwrap());
+        assert_eq!(resolved, file.to_str().unwrap());
+    }
+
+    #[test]
+    fn resolve_disk_dir_with_qcow2() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("disk.qcow2"), b"fake").unwrap();
+        std::fs::write(dir.path().join("other.txt"), b"other").unwrap();
+        let resolved = FileStore.resolve_disk(dir.path().to_str().unwrap());
+        assert!(resolved.ends_with("disk.qcow2"));
+    }
+
+    #[test]
+    fn resolve_disk_dir_single_file() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("myimage"), b"fake").unwrap();
+        let resolved = FileStore.resolve_disk(dir.path().to_str().unwrap());
+        assert!(resolved.ends_with("myimage"));
+    }
+
+    #[test]
+    fn resolve_disk_dir_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a"), b"fake").unwrap();
+        std::fs::write(dir.path().join("b"), b"fake").unwrap();
+        let resolved = FileStore.resolve_disk(dir.path().to_str().unwrap());
+        assert!(resolved.ends_with("disk.qcow2"));
+    }
+
+    #[test]
+    fn resolve_disk_empty_dir_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let resolved = FileStore.resolve_disk(dir.path().to_str().unwrap());
+        assert!(resolved.ends_with("disk.qcow2"));
     }
 }

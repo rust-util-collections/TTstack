@@ -20,23 +20,23 @@ sudo tt image create alpine-cloud           # generate QEMU cloud image (SSH-rea
 tt config <controller-ip>:9200 --api-key <api-key> # key printed by deploy
 tt host add <agent-ip>:9100                 # register a host
 
-tt env create demo --image alpine-cloud --engine qemu --port 22
+tt env create demo --image alpine-cloud --engine qemu \
+  --ssh-key ~/.ssh/id_ed25519.pub
 tt env show demo                            # see port mappings
-ssh root@<host-ip> -p <mapped-port>         # password: ttstack
+ssh root@<host-ip> -p <mapped-port>         # key-based auth
 ```
 
 ## VM Access
 
-| Engine | How to access | Default credentials |
-|--------|--------------|---------------------|
-| **QEMU** cloud images | `ssh root@<host> -p <mapped-port>` | password: **ttstack** |
-| **QEMU** custom images | SSH via port forwarding | your own |
-| **Docker** | `docker exec -it <container-id> sh` | — |
-| **Firecracker** | serial console only | — |
-| **Jail** (FreeBSD) | `jexec <jail-name> sh` | — |
-| **Bhyve** (FreeBSD) | SSH via port forwarding | depends on image |
+| Engine | How to access |
+|--------|--------------|
+| **QEMU** cloud images | `ssh root@<host> -p <mapped-port>` (SSH key injected via cloud-init) |
+| **QEMU** custom images | SSH via port forwarding (your own key setup) |
+| **Docker** | SSH (if sshd in image) or `docker exec` from host |
+| **Firecracker** | serial console only |
+| **Bhyve** (FreeBSD) | SSH via port forwarding |
 
-QEMU cloud images auto-configure via **cloud-init**: root password, SSH,
+QEMU cloud images auto-configure via **cloud-init**: SSH public keys,
 networking — all set on first boot. See [docs/guest-images.md](docs/guest-images.md).
 
 ## Security
@@ -82,7 +82,8 @@ See [docs/guest-images.md](docs/guest-images.md) for custom image creation.
 - **Multi-engine**: QEMU/KVM, Firecracker, Docker/Podman (Linux); Bhyve, Jail (FreeBSD)
 - **Multi-host fleet**: up to 50 hosts, 1000 VM instances, best-fit scheduling
 - **Environments**: group VMs with lifecycle control and auto-expiry (default 6h)
-- **Storage backends**: ZFS snapshots, Btrfs subvolumes, raw copies
+- **Storage backends**: ZFS zvol (instant clone), plain qcow2 file copies
+- **SSH key injection**: provide public keys at create time; port 22 auto-included
 - **Web dashboard**: built-in monitoring UI at `http://<controller>:9200`
 - **Simple deploy**: three binaries, SQLite, one command (`tt deploy all`)
 
@@ -128,6 +129,7 @@ tt deploy agent/ctl/all/dist        Deploy TTstack
 | `--mem <MiB>` | Memory per VM | 1024 |
 | `--disk <MiB>` | Disk per VM | 40960 |
 | `--dup <N>` | Replicas per image | 1 |
+| `--ssh-key <FILE>` | SSH public key file (repeatable) | *required for VMs* |
 | `-p, --port <PORT>` | Guest port to expose (repeatable) | — |
 | `--lifetime <SEC>` | Auto-expiry (0 = 6h default) | 21600 |
 | `--deny-outgoing` | Block outbound traffic | false |

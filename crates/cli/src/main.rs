@@ -111,6 +111,9 @@ enum EnvCmd {
         /// Owner identifier (defaults to $USER).
         #[arg(long)]
         owner: Option<String>,
+        /// SSH public key for VM access (repeatable). Can also be a path to a .pub file.
+        #[arg(long)]
+        ssh_key: Vec<String>,
     },
     /// List all environments.
     List,
@@ -354,6 +357,7 @@ async fn cmd_env(c: &Client, action: EnvCmd) -> Result<()> {
             lifetime,
             deny_outgoing,
             owner,
+            ssh_key,
         } => {
             let engine: Engine = engine
                 .parse()
@@ -362,6 +366,27 @@ async fn cmd_env(c: &Client, action: EnvCmd) -> Result<()> {
             let owner = owner
                 .or_else(|| std::env::var("USER").ok())
                 .unwrap_or_else(|| "default".to_string());
+
+            // Resolve SSH keys: if a value looks like a file path, read it
+            let ssh_keys: Vec<String> = ssh_key
+                .into_iter()
+                .map(|k| {
+                    if (k.ends_with(".pub") || k.starts_with('/') || k.starts_with("~/"))
+                        && !k.starts_with("ssh-")
+                    {
+                        let path = if k.starts_with("~/") {
+                            k.replacen("~", &std::env::var("HOME").unwrap_or_default(), 1)
+                        } else {
+                            k.clone()
+                        };
+                        std::fs::read_to_string(&path)
+                            .map(|s| s.trim().to_string())
+                            .unwrap_or(k)
+                    } else {
+                        k
+                    }
+                })
+                .collect();
 
             let mut vms = Vec::new();
             for img in &image {
@@ -374,6 +399,7 @@ async fn cmd_env(c: &Client, action: EnvCmd) -> Result<()> {
                         disk,
                         ports: port.clone(),
                         deny_outgoing,
+                        ssh_keys: vec![],
                     });
                 }
             }
@@ -383,6 +409,7 @@ async fn cmd_env(c: &Client, action: EnvCmd) -> Result<()> {
                 owner,
                 vms,
                 lifetime,
+                ssh_keys,
             };
 
             let detail: EnvDetail = c.post("/api/envs", &req).await?;

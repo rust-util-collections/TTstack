@@ -54,17 +54,17 @@ impl std::str::FromStr for Engine {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Storage {
-    Zfs,
-    Btrfs,
-    Raw,
+    /// Plain qcow2 file copies — works on any filesystem.
+    File,
+    /// ZFS zvol — raw block devices backed by ZFS volumes.
+    Zvol,
 }
 
 impl fmt::Display for Storage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Zfs => write!(f, "zfs"),
-            Self::Btrfs => write!(f, "btrfs"),
-            Self::Raw => write!(f, "raw"),
+            Self::File => write!(f, "file"),
+            Self::Zvol => write!(f, "zvol"),
         }
     }
 }
@@ -73,9 +73,8 @@ impl std::str::FromStr for Storage {
     type Err = Box<dyn std::error::Error>;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_str() {
-            "zfs" => Ok(Self::Zfs),
-            "btrfs" => Ok(Self::Btrfs),
-            "raw" | "file" => Ok(Self::Raw),
+            "file" => Ok(Self::File),
+            "zvol" => Ok(Self::Zvol),
             _ => Err(format!("unknown storage backend: {s}").into()),
         }
     }
@@ -304,16 +303,11 @@ mod tests {
 
     #[test]
     fn storage_display_roundtrip() {
-        for s in [Storage::Zfs, Storage::Btrfs, Storage::Raw] {
+        for s in [Storage::File, Storage::Zvol] {
             let text = s.to_string();
             let parsed: Storage = text.parse().unwrap();
             assert_eq!(s, parsed);
         }
-    }
-
-    #[test]
-    fn storage_alias_file() {
-        assert_eq!("file".parse::<Storage>().unwrap(), Storage::Raw);
     }
 
     #[test]

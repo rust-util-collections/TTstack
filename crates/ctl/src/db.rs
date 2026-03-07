@@ -331,7 +331,7 @@ mod tests {
             },
             state: HostState::Online,
             engines: vec![Engine::Qemu],
-            storage: Storage::Raw,
+            storage: Storage::File,
             registered_at: 1000,
         }
     }

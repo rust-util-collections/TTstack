@@ -290,6 +290,12 @@ pub async fn create_env(
             disk,
             ports: spec.ports.clone(),
             deny_outgoing: spec.deny_outgoing,
+            ssh_keys: {
+                let mut keys = req.ssh_keys.clone();
+                keys.extend(spec.ssh_keys.iter().cloned());
+                keys.dedup();
+                keys
+            },
         };
 
         let url = format!("http://{}/api/vms", placement.host_addr);

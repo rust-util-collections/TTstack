@@ -28,7 +28,13 @@ impl BhyveEngine {
 }
 
 impl VmEngine for BhyveEngine {
-    fn create(&self, vm: &Vm, image_path: &str) -> Result<()> {
+    fn create(
+        &self,
+        vm: &Vm,
+        image_path: &str,
+        _disk_format: &str,
+        _ssh_keys: &[String],
+    ) -> Result<()> {
         // Load the VM into bhyve via bhyveload
         let output = Command::new("bhyveload")
             .args(["-m", &format!("{}M", vm.mem)])

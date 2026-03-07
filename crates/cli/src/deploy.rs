@@ -112,7 +112,7 @@ fn default_agent_listen() -> String {
     "0.0.0.0:9100".into()
 }
 fn default_storage() -> String {
-    "raw".into()
+    "file".into()
 }
 fn default_disk_total() -> String {
     "200G".into()
@@ -554,7 +554,7 @@ pub async fn deploy_local(role: &str, release_dir: &str) -> Result<()> {
             let cmd = format!(
                 "{prefix}/bin/tt-agent --listen 0.0.0.0:9100 \
                  --image-dir {home}/images --runtime-dir {home}/runtime \
-                 --data-dir {home}/data --storage raw"
+                 --data-dir {home}/data --storage file"
             );
             let env_path = format!("{prefix}/etc/tt-agent.env");
             local_install_systemd("tt-agent", &cmd, true, Some((&env_path, &env_content))).await?;
@@ -761,7 +761,7 @@ host = "10.0.0.2"
         assert_eq!(cfg.agents.len(), 1);
         assert_eq!(cfg.agents[0].host, "10.0.0.2");
         assert_eq!(cfg.agents[0].ssh_port, 22);
-        assert_eq!(cfg.agents[0].storage, "raw");
+        assert_eq!(cfg.agents[0].storage, "file");
     }
 
     #[test]
@@ -778,7 +778,7 @@ listen = "0.0.0.0:9200"
 
 [[agents]]
 host = "10.0.0.2"
-storage = "zfs"
+storage = "zvol"
 host_id = "node-a"
 cpu_total = 32
 mem_total = 65536
@@ -794,7 +794,7 @@ host = "10.0.0.3"
         assert_eq!(cfg.general.api_key.as_deref(), Some("my-secret-key"));
         assert!(cfg.controller.is_some());
         assert_eq!(cfg.agents.len(), 2);
-        assert_eq!(cfg.agents[0].storage, "zfs");
+        assert_eq!(cfg.agents[0].storage, "zvol");
         assert_eq!(cfg.agents[0].host_id.as_deref(), Some("node-a"));
         assert_eq!(parse_disk(&cfg.agents[0].disk_total), 1024000);
     }

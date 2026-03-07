@@ -23,8 +23,8 @@ pub struct Config {
     #[arg(long, default_value = "/home/ttstack/data")]
     pub data_dir: String,
 
-    /// Storage backend: zfs, btrfs, or raw.
-    #[arg(long, default_value = "raw")]
+    /// Storage backend: file or zvol.
+    #[arg(long, default_value = "file")]
     pub storage: String,
 
     /// Total CPU cores available for VMs (0 = auto-detect).
@@ -50,7 +50,7 @@ pub struct Config {
 
 impl Config {
     pub fn storage_kind(&self) -> Storage {
-        self.storage.parse().unwrap_or(Storage::Raw)
+        self.storage.parse().unwrap_or(Storage::File)
     }
 
     /// Auto-detect CPU count if set to 0.
@@ -149,21 +149,21 @@ MemAvailable:    9876543 kB";
 
     #[test]
     fn storage_kind_default() {
-        // Default is "raw"
+        // Default is "file"
         let cfg = Config::parse_from(["tt-agent"]);
-        assert_eq!(cfg.storage_kind(), Storage::Raw);
+        assert_eq!(cfg.storage_kind(), Storage::File);
     }
 
     #[test]
-    fn storage_kind_zfs() {
-        let cfg = Config::parse_from(["tt-agent", "--storage", "zfs"]);
-        assert_eq!(cfg.storage_kind(), Storage::Zfs);
+    fn storage_kind_zvol() {
+        let cfg = Config::parse_from(["tt-agent", "--storage", "zvol"]);
+        assert_eq!(cfg.storage_kind(), Storage::Zvol);
     }
 
     #[test]
     fn storage_kind_invalid_falls_back() {
         let cfg = Config::parse_from(["tt-agent", "--storage", "foo"]);
-        assert_eq!(cfg.storage_kind(), Storage::Raw);
+        assert_eq!(cfg.storage_kind(), Storage::File);
     }
 
     #[test]

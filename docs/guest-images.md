@@ -24,31 +24,33 @@ sudo tt image create alpine-cloud --image-dir /home/ttstack/images
 
 ## Accessing VMs
 
-How to log into VMs depends on the engine:
+All VMs and containers are accessed via **SSH**. When creating an environment,
+provide your SSH public key(s) — TTstack injects them into the guest via
+cloud-init (QEMU) or authorized_keys. Port 22 is always auto-included.
 
-| Engine | Access Method | Credentials |
-|--------|--------------|-------------|
-| **QEMU** (cloud images) | SSH via port forwarding | root / `ttstack` |
-| **QEMU** (custom images) | SSH via port forwarding | Whatever you configured in the image |
-| **Docker** | `docker exec -it <container-id> sh` | N/A (no password needed) |
-| **Firecracker** | Serial console only (no SSH by default) | N/A |
-| **Jail** (FreeBSD) | `jexec <jail-name> sh` from the host | N/A |
-| **Bhyve** (FreeBSD) | SSH via port forwarding | Depends on the image |
+| Engine | Access Method |
+|--------|--------------|
+| **QEMU** (cloud images) | SSH via port forwarding (key injected by cloud-init) |
+| **QEMU** (custom images) | SSH via port forwarding (your own key setup) |
+| **Docker** | SSH into container (if sshd installed) or `docker exec` from host |
+| **Firecracker** | Serial console only (no SSH by default) |
+| **Bhyve** (FreeBSD) | SSH via port forwarding |
 
 ### QEMU Cloud Images (SSH)
 
 For built-in cloud images (`alpine-cloud`, `debian-cloud`, `ubuntu-cloud`),
 TTstack auto-generates a **cloud-init seed ISO** on each VM boot that:
 
-- Sets the root password to `ttstack`
-- Enables SSH password authentication
+- Injects your SSH public key(s) into `~root/.ssh/authorized_keys`
+- Enables SSH public-key authentication
 - Configures the VM's network (static IP, gateway, DNS)
 
 To SSH into a QEMU VM:
 
 ```bash
-# Create environment with SSH port exposed
-tt env create myenv --image alpine-cloud --engine qemu --port 22
+# Create environment with your SSH key
+tt env create myenv --image alpine-cloud --engine qemu \
+  --ssh-key ~/.ssh/id_ed25519.pub
 
 # Show environment to see port mappings
 tt env show myenv
@@ -58,7 +60,6 @@ tt env show myenv
 
 # SSH using the mapped port
 ssh root@<host-ip> -p 20100
-# Password: ttstack
 ```
 
 For custom QEMU images that do not use cloud-init, the seed ISO
@@ -66,14 +67,15 @@ is harmlessly ignored — you manage SSH credentials yourself.
 
 ### Docker Containers
 
-Docker containers are managed via the Docker runtime. Access
+Docker containers are managed via the Docker runtime. If the container
+has an SSH daemon, connect via the mapped port. Otherwise, access
 from the host machine:
 
 ```bash
 # Find the container ID
 docker ps | grep <vm-id>
 
-# Exec into the container
+# Exec into the container (host-only fallback)
 docker exec -it <container-id> sh
 ```
 
@@ -82,14 +84,6 @@ docker exec -it <container-id> sh
 Firecracker VMs boot into a shell on the serial console but have
 no SSH daemon by default. They are designed for headless workloads.
 To add SSH, customize the rootfs image with an OpenSSH server.
-
-### FreeBSD Jails
-
-Jails are accessed from the host:
-
-```bash
-jexec <jail-name> sh
-```
 
 ## Image Formats by Engine
 
@@ -178,14 +172,13 @@ QEMU images are **qcow2 disk image files** containing a bootable filesystem.
 **Image location:**
 ```
 /home/ttstack/images/
-  └── qemu-test          # Single qcow2 file (for raw storage)
+  └── qemu-test          # Single qcow2 file (for file storage)
 ```
 
-When using ZFS or Btrfs storage, the image is a directory containing the qcow2:
+When using zvol storage, the image is written to a ZFS zvol exposed as a
+raw block device at `/dev/zvol/<pool>/<dataset>`:
 ```
-/home/ttstack/images/
-  └── qemu-test/
-      └── disk.qcow2     # The actual disk image
+/dev/zvol/tank/ttstack/images/qemu-test   # Raw block device
 ```
 
 **Creating manually:**
@@ -216,9 +209,9 @@ qemu-nbd --disconnect /dev/nbd0
 
 ## Storage Backend Considerations
 
-### Raw (default)
+### File (default)
 
-Images are plain files or directories. On Linux, cloning uses
+Images are plain qcow2 files, filesystem-agnostic. On Linux, cloning uses
 `cp --reflink=auto` (CoW if the filesystem supports it, full copy
 otherwise). On FreeBSD, plain `cp -a` is used.
 
@@ -227,9 +220,11 @@ otherwise). On FreeBSD, plain `cp -a` is used.
 cp my-image.qcow2 /home/ttstack/images/qemu-test
 ```
 
-### ZFS
+### Zvol
 
-Images must be **ZFS datasets** (child datasets of the image pool).
+Images are stored as **ZFS zvols** — raw block devices exposed at
+`/dev/zvol/<pool>/<dataset>`. Cloning uses `zfs snapshot` + `zfs clone`
+— instant and space-efficient.
 
 ```bash
 # Setup
@@ -237,35 +232,13 @@ zpool create ttpool /dev/nvmeXnYpZ
 zfs create ttpool/images
 zfs create ttpool/runtime
 
-# Create image as a dataset
-zfs create ttpool/images/qemu-test
-cp my-image.qcow2 /ttpool/images/qemu-test/disk.qcow2
+# Create image as a zvol
+zfs create -V 10G ttpool/images/qemu-test
+# Write image data to /dev/zvol/ttpool/images/qemu-test
 
 # Agent config
-tt-agent --image-dir /ttpool/images --runtime-dir /ttpool/runtime --storage zfs
+tt-agent --image-dir ttpool/images --runtime-dir ttpool/runtime --storage zvol
 ```
-
-Cloning uses `zfs snapshot` + `zfs clone` — instant and space-efficient.
-
-### Btrfs
-
-Images must be **Btrfs subvolumes**.
-
-```bash
-# Setup
-mkfs.btrfs /dev/nvmeXnYpZ
-mount /dev/nvmeXnYpZ /mnt/btrfs-tt
-mkdir /mnt/btrfs-tt/{images,runtime}
-
-# Create image as a subvolume
-btrfs subvolume create /mnt/btrfs-tt/images/qemu-test
-cp my-image.qcow2 /mnt/btrfs-tt/images/qemu-test/disk.qcow2
-
-# Agent config
-tt-agent --image-dir /mnt/btrfs-tt/images --runtime-dir /mnt/btrfs-tt/runtime --storage btrfs
-```
-
-Cloning uses `btrfs subvolume snapshot` — instant and space-efficient.
 
 ## Networking
 

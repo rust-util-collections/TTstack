@@ -55,6 +55,7 @@ curl -X POST http://controller:9200/api/envs \
   -d '{
     "id": "my-env",
     "owner": "alice",
+    "ssh_keys": ["ssh-ed25519 AAAA... alice@laptop"],
     "vms": [
       {
         "image": "alpine-cloud",
@@ -62,7 +63,7 @@ curl -X POST http://controller:9200/api/envs \
         "cpu": 2,
         "mem": 2048,
         "disk": 40960,
-        "ports": [22, 80],
+        "ports": [80],
         "deny_outgoing": false
       }
     ],
@@ -75,3 +76,33 @@ curl -X POST http://controller:9200/api/envs \
 ```bash
 curl -H "Authorization: Bearer <key>" http://controller:9200/api/status
 ```
+
+## Request / Response Reference
+
+### CreateEnvReq (POST `/api/envs`)
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | yes | Environment name |
+| `owner` | string | no | Owner label |
+| `ssh_keys` | string[] | yes | SSH public keys injected into all VMs (cloud-init `authorized_keys`) |
+| `vms` | VmSpec[] | yes | List of VM specifications |
+| `lifetime` | integer | no | Auto-expiry in seconds (default: 21600 = 6h) |
+
+### VmSpec (element of `vms` array)
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `image` | string | yes | Base image name |
+| `engine` | string | no | `qemu`, `firecracker`, `docker`, `bhyve`, `jail` (default: `qemu`) |
+| `cpu` | integer | no | vCPUs (default: 2) |
+| `mem` | integer | no | Memory in MiB (default: 1024) |
+| `disk` | integer | no | Disk in MiB (default: 40960) |
+| `ports` | integer[] | no | Guest ports to expose; port 22 is always auto-included |
+| `deny_outgoing` | boolean | no | Block outbound traffic (default: false) |
+
+### Storage field (agent `/api/info`)
+
+The `storage` field in host info reports the backend type:
+- `"file"` — plain qcow2 files, filesystem-agnostic (aliases: `"raw"`)
+- `"zvol"` — ZFS zvol raw block devices (aliases: `"zfs"`)

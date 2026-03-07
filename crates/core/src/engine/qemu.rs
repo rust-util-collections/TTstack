@@ -22,47 +22,17 @@ impl QemuEngine {
         Self
     }
 
-    /// Resolve the disk image file path.
-    ///
-    /// If `image_path` is a regular file, use it directly.
-    /// If it's a directory (e.g. a ZFS dataset or Btrfs subvolume),
-    /// look for a qcow2 file inside it.
-    fn resolve_disk(image_path: &str) -> String {
-        use std::path::Path;
-        let p = Path::new(image_path);
-        if p.is_dir() {
-            // Look for a .qcow2 file first, then any single file
-            if let Ok(entries) = std::fs::read_dir(p) {
-                let files: Vec<_> = entries
-                    .filter_map(|e| e.ok())
-                    .filter(|e| e.path().is_file())
-                    .collect();
-                if let Some(qcow2) = files
-                    .iter()
-                    .find(|f| f.path().extension().is_some_and(|ext| ext == "qcow2"))
-                {
-                    return qcow2.path().to_string_lossy().into_owned();
-                }
-                if files.len() == 1 {
-                    return files[0].path().to_string_lossy().into_owned();
-                }
-            }
-            // Fallback: assume disk.qcow2
-            format!("{image_path}/disk.qcow2")
-        } else {
-            image_path.to_string()
-        }
-    }
-
-    fn build_cmd(&self, vm: &Vm, image_path: &str) -> Command {
+    fn build_cmd(&self, vm: &Vm, disk_path: &str, disk_format: &str) -> Command {
         let tap = crate::net::tap_name(&vm.id);
-        let disk = Self::resolve_disk(image_path);
         let mut cmd = Command::new("qemu-system-x86_64");
         cmd.args(["-enable-kvm", "-daemonize"])
             .args(["-name", &vm.id])
             .args(["-m", &format!("{}M", vm.mem)])
             .args(["-smp", &vm.cpu.to_string()])
-            .args(["-drive", &format!("file={disk},format=qcow2,if=virtio")])
+            .args([
+                "-drive",
+                &format!("file={disk_path},format={disk_format},if=virtio"),
+            ])
             .args([
                 "-netdev",
                 &format!("tap,id=net0,ifname={tap},script=no,downscript=no"),
@@ -90,8 +60,8 @@ impl QemuEngine {
     /// Generate a cloud-init NoCloud seed ISO for the VM.
     ///
     /// This allows cloud images (Alpine, Debian, Ubuntu) to auto-configure
-    /// on first boot: set root password, enable SSH, configure networking.
-    fn generate_seed_iso(&self, vm: &Vm) -> Result<()> {
+    /// on first boot: configure networking, inject SSH keys, enable sshd.
+    fn generate_seed_iso(&self, vm: &Vm, ssh_keys: &[String]) -> Result<()> {
         let seed_dir = format!("{RUN_DIR}/seed-{}", vm.id);
         std::fs::create_dir_all(&seed_dir).c(d!("create seed dir"))?;
 
@@ -121,17 +91,27 @@ ethernets:
         std::fs::write(format!("{seed_dir}/network-config"), network_config)
             .c(d!("write network-config"))?;
 
-        // user-data — set root password and enable SSH
-        let user_data = r#"#cloud-config
-password: ttstack
-chpasswd:
-  expire: false
-ssh_pwauth: true
-disable_root: false
-runcmd:
-  - sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
-  - systemctl restart sshd 2>/dev/null || service sshd restart 2>/dev/null || rc-service sshd restart 2>/dev/null || true
-"#;
+        // user-data — inject SSH keys, disable password login
+        let mut user_data = String::from(
+            "#cloud-config\n\
+             disable_root: false\n\
+             ssh_pwauth: false\n",
+        );
+
+        if !ssh_keys.is_empty() {
+            user_data.push_str("ssh_authorized_keys:\n");
+            for key in ssh_keys {
+                user_data.push_str(&format!("  - {key}\n"));
+            }
+        }
+
+        user_data.push_str(
+            "runcmd:\n  \
+             - sed -i 's/^#*PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config\n  \
+             - sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config\n  \
+             - systemctl restart sshd 2>/dev/null || service sshd restart 2>/dev/null || rc-service sshd restart 2>/dev/null || true\n",
+        );
+
         std::fs::write(format!("{seed_dir}/user-data"), user_data).c(d!("write user-data"))?;
 
         // Generate ISO using genisoimage or mkisofs
@@ -191,11 +171,17 @@ runcmd:
 }
 
 impl VmEngine for QemuEngine {
-    fn create(&self, vm: &Vm, image_path: &str) -> Result<()> {
+    fn create(
+        &self,
+        vm: &Vm,
+        image_path: &str,
+        disk_format: &str,
+        ssh_keys: &[String],
+    ) -> Result<()> {
         std::fs::create_dir_all(RUN_DIR).c(d!("create runtime dir"))?;
 
         // Generate cloud-init seed ISO (best-effort; non-cloud images ignore it)
-        if let Err(e) = self.generate_seed_iso(vm) {
+        if let Err(e) = self.generate_seed_iso(vm, ssh_keys) {
             eprintln!(
                 "[qemu] WARN: could not create seed ISO for {}: {e} (cloud-init may not work)",
                 vm.id
@@ -203,7 +189,7 @@ impl VmEngine for QemuEngine {
         }
 
         let output = self
-            .build_cmd(vm, image_path)
+            .build_cmd(vm, image_path, disk_format)
             .output()
             .c(d!("spawn qemu"))?;
 
@@ -307,45 +293,39 @@ mod tests {
     use super::*;
 
     #[test]
-    fn resolve_disk_plain_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("image.qcow2");
-        std::fs::write(&file, b"fake").unwrap();
-        let resolved = QemuEngine::resolve_disk(file.to_str().unwrap());
-        assert_eq!(resolved, file.to_str().unwrap());
-    }
+    fn build_cmd_uses_disk_format() {
+        // Smoke test: ensure disk_format ends up in the -drive arg
+        let eng = QemuEngine::new();
+        let vm = Vm {
+            id: "test-vm".into(),
+            env_id: "e1".into(),
+            host_id: "h1".into(),
+            image: "img".into(),
+            engine: crate::model::Engine::Qemu,
+            cpu: 2,
+            mem: 1024,
+            disk: 10240,
+            ip: "10.10.0.2".into(),
+            port_map: Default::default(),
+            state: VmState::Creating,
+            created_at: 0,
+        };
 
-    #[test]
-    fn resolve_disk_dir_with_qcow2() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("disk.qcow2"), b"fake").unwrap();
-        std::fs::write(dir.path().join("other.txt"), b"other").unwrap();
-        let resolved = QemuEngine::resolve_disk(dir.path().to_str().unwrap());
-        assert!(resolved.ends_with("disk.qcow2"));
-    }
+        let cmd = eng.build_cmd(&vm, "/dev/zvol/tank/clone-1", "raw");
+        let args: Vec<_> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        let drive_arg = args.iter().find(|a| a.starts_with("file=")).unwrap();
+        assert!(drive_arg.contains("format=raw"));
+        assert!(drive_arg.contains("/dev/zvol/tank/clone-1"));
 
-    #[test]
-    fn resolve_disk_dir_single_file() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("myimage"), b"fake").unwrap();
-        let resolved = QemuEngine::resolve_disk(dir.path().to_str().unwrap());
-        assert!(resolved.ends_with("myimage"));
-    }
-
-    #[test]
-    fn resolve_disk_dir_fallback() {
-        let dir = tempfile::tempdir().unwrap();
-        // Multiple files, none .qcow2
-        std::fs::write(dir.path().join("a"), b"fake").unwrap();
-        std::fs::write(dir.path().join("b"), b"fake").unwrap();
-        let resolved = QemuEngine::resolve_disk(dir.path().to_str().unwrap());
-        assert!(resolved.ends_with("disk.qcow2")); // fallback
-    }
-
-    #[test]
-    fn resolve_disk_empty_dir_fallback() {
-        let dir = tempfile::tempdir().unwrap();
-        let resolved = QemuEngine::resolve_disk(dir.path().to_str().unwrap());
-        assert!(resolved.ends_with("disk.qcow2"));
+        let cmd2 = eng.build_cmd(&vm, "/tmp/disk.qcow2", "qcow2");
+        let args2: Vec<_> = cmd2
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        let drive_arg2 = args2.iter().find(|a| a.starts_with("file=")).unwrap();
+        assert!(drive_arg2.contains("format=qcow2"));
     }
 }

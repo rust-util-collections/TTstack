@@ -64,7 +64,7 @@ host = "10.0.0.2"                 # Agent IP or hostname
 # ssh_user = "root"
 # ssh_port = 22
 # listen = "0.0.0.0:9100"
-# storage = "raw"                 # "raw", "zfs", or "btrfs"
+# storage = "file"                 # "file" or "zvol"
 # image_dir = "/home/ttstack/images"
 # runtime_dir = "/home/ttstack/runtime"
 # cpu_total = 0                   # 0 = auto-detect
@@ -75,7 +75,7 @@ host = "10.0.0.2"                 # Agent IP or hostname
 
 [[agents]]
 host        = "10.0.0.3"
-storage     = "zfs"
+storage     = "zvol"
 image_dir   = "tank/ttstack/images"
 runtime_dir = "tank/ttstack/runtime"
 cpu_total   = 32
@@ -124,7 +124,7 @@ tt-agent [OPTIONS]
   --image-dir <PATH>      Base image directory         [/home/ttstack/images]
   --runtime-dir <PATH>    Runtime clone directory      [/home/ttstack/runtime]
   --data-dir <PATH>       Database directory            [/home/ttstack/data]
-  --storage <TYPE>        zfs | btrfs | raw            [raw]
+  --storage <TYPE>        zvol | file                  [file]
   --cpu-total <N>         CPU cores (0=auto)           [0]
   --mem-total <MiB>       Memory in MiB (0=auto)       [0]
   --disk-total <MiB>      Disk in MiB                  [204800 (~200 GiB)]

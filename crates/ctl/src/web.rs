@@ -215,6 +215,9 @@ const FRONTEND_HTML: &str = r##"<!DOCTYPE html>
       <input type="checkbox" id="env-deny-outgoing">
       <label for="env-deny-outgoing" style="margin-bottom:0">Deny outgoing network</label>
     </div>
+    <div><label>SSH Public Keys (one per line)</label>
+      <textarea id="env-ssh-keys" rows="3" placeholder="ssh-ed25519 AAAA... user@host"></textarea>
+    </div>
     <div class="actions">
       <button class="btn" style="background:var(--border)" onclick="hideModals()">Cancel</button>
       <button class="btn" id="btn-create-env" onclick="createEnv()">Create</button>
@@ -411,6 +414,8 @@ async function createEnv() {
   var portsStr = document.getElementById('env-ports').value.trim();
   var lifetime = parseInt(document.getElementById('env-lifetime').value) || 0;
   var denyOutgoing = document.getElementById('env-deny-outgoing').checked;
+  var sshKeysRaw = document.getElementById('env-ssh-keys').value.trim();
+  var sshKeys = sshKeysRaw ? sshKeysRaw.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 0; }) : [];
 
   if (!name || !image) { toast('Name and image are required', true); return; }
 
@@ -418,10 +423,10 @@ async function createEnv() {
 
   var vms = [];
   for (var i = 0; i < dup; i++) {
-    vms.push({ image: image, engine: engine, cpu: cpu, mem: mem, disk: disk, ports: ports, deny_outgoing: denyOutgoing });
+    vms.push({ image: image, engine: engine, cpu: cpu, mem: mem, disk: disk, ports: ports, deny_outgoing: denyOutgoing, ssh_keys: [] });
   }
 
-  var body = { id: name, owner: owner, vms: vms, lifetime: lifetime > 0 ? lifetime : null };
+  var body = { id: name, owner: owner, vms: vms, lifetime: lifetime > 0 ? lifetime : null, ssh_keys: sshKeys };
 
   setBtn('btn-create-env', true);
   try {
