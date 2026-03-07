@@ -52,7 +52,7 @@ FreeBSD hosts require:
 
 | Backend | Host Requirements | Performance | Notes |
 |---------|------------------|-------------|-------|
-| raw | Any filesystem | Baseline | Uses `cp --reflink=auto` for CoW on supported FS |
+| raw | Any filesystem | Baseline | Linux: `cp --reflink=auto` for CoW; FreeBSD: `cp -a` |
 | ZFS | ZFS pool mounted | Fast (instant clone) | Requires `zfs` CLI; images stored as datasets |
 | Btrfs | Btrfs filesystem mounted | Fast (snapshot clone) | Requires `btrfs` CLI; images stored as subvolumes |
 
@@ -108,8 +108,10 @@ modprobe tun  # if /dev/net/tun is missing
 - **Engines detected**: bhyve, jail
 
 **Test results**:
-- All 50 unit tests pass natively on FreeBSD
+- All 82 unit tests pass natively on FreeBSD (89 workspace-wide; some Linux-only tests excluded)
 - Agent: Starts successfully, bridge `tt0` created via `ifconfig bridge create name tt0`
+- Jail engine: Full lifecycle (create → stop → start → destroy) verified end-to-end
+- Bhyve engine: Code verified; requires hardware VMX (cannot test in nested QEMU)
 - CLI: Connects to remote controller, displays fleet status and host list
 - Controller: Builds and runs on FreeBSD (cross-platform component)
 - Build: Compiles all three binaries (tt, tt-agent, tt-ctl) without modification
