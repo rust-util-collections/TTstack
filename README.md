@@ -39,20 +39,25 @@ across multiple physical hosts.
 
 ## Quick Start
 
-### 1. Build and install
+### 1. Build and deploy
 
 ```bash
 make release
 
-# Or use the idempotent deploy script (requires root):
-make deploy          # both agent + controller on this host
-make deploy-agent    # agent only
-make deploy-ctl      # controller only
+# Deploy locally (requires root):
+sudo tt deploy all              # both agent + controller
+sudo tt deploy agent            # agent only
+sudo tt deploy ctl              # controller only
 
 # Or distributed deploy via SSH:
 cp tools/deploy.toml.example deploy.toml
 # edit deploy.toml with your fleet IPs...
-make deploy-dist
+tt deploy dist deploy.toml
+
+# Generate ready-to-use images:
+sudo tt image create all --engine docker    # Docker images
+sudo tt image create fc-alpine              # Firecracker microVM
+sudo tt image create alpine-cloud           # QEMU cloud image
 ```
 
 Directory layout after deploy:
@@ -109,6 +114,15 @@ tt env stop <name>                  Stop all VMs
 tt env start <name>                 Start all VMs
 
 tt image list                       List images across all hosts
+tt image recipes                    List auto-generatable image recipes
+tt image create <name>              Create image from built-in recipe
+tt image create all                 Create all images for this platform
+tt image create all --engine docker Create all Docker images
+
+tt deploy agent                     Deploy agent locally (requires root)
+tt deploy ctl                       Deploy controller locally (requires root)
+tt deploy all                       Deploy both locally (requires root)
+tt deploy dist [deploy.toml]        Distributed deploy via SSH
 ```
 
 ### `env create` options
@@ -125,6 +139,37 @@ tt image list                       List images across all hosts
 | `--lifetime <SEC>` | Auto-expiry in seconds (0 = 6h default) | 21600 |
 | `--deny-outgoing` | Block outbound traffic | false |
 | `--owner <USER>` | Owner label | `$USER` |
+
+### Built-in Image Recipes
+
+TTstack ships with auto-generation for common guest images so you can
+start creating VMs immediately after deployment:
+
+| Recipe | Engine | Description |
+|--------|--------|-------------|
+| `alpine` | Docker | Alpine Linux 3.21 (~8MB) |
+| `debian` | Docker | Debian 13 Trixie slim (~75MB) |
+| `ubuntu` | Docker | Ubuntu 24.04 LTS (~30MB) |
+| `rockylinux` | Docker | Rocky Linux 9 (~70MB) |
+| `nginx` | Docker | Nginx web server (~45MB) |
+| `redis` | Docker | Redis 7 (~35MB) |
+| `postgres` | Docker | PostgreSQL 17 (~85MB) |
+| `fc-alpine` | Firecracker | Alpine microVM with kernel + rootfs (~50MB) |
+| `alpine-cloud` | QEMU | Alpine 3.21 cloud image (~150MB) |
+| `debian-cloud` | QEMU | Debian 13 cloud image (~350MB) |
+| `ubuntu-cloud` | QEMU | Ubuntu 24.04 cloud image (~600MB) |
+| `freebsd-base` | Jail | FreeBSD 14.3 base (~180MB) |
+
+```bash
+# Generate all Docker images
+sudo tt image create all --engine docker
+
+# Generate a specific image
+sudo tt image create fc-alpine --image-dir /home/ttstack/images
+
+# Generate everything for this platform
+sudo tt image create all --image-dir /home/ttstack/images
+```
 
 ## Platform Support
 
@@ -210,6 +255,8 @@ tt-ctl [OPTIONS]
 
 ## Deployment
 
+Deployment is built into the `tt` CLI binary — no external scripts needed.
+
 ### Prerequisites
 
 **Linux agents**: nftables, `tun`/`vhost_net`/`kvm_intel` kernel modules, `socat` (for QEMU monitor)
@@ -236,9 +283,9 @@ mem_total = 65536     # 64 GiB
 disk_total = "1000G"  # ~1 TiB
 ```
 
-Then: `make deploy-dist`
+Then: `tt deploy dist deploy.toml`
 
-The deploy script is idempotent — safe to re-run for upgrades.
+The deploy is idempotent — safe to re-run for upgrades.
 Schema migrations run automatically on startup.
 
 ## Project Structure

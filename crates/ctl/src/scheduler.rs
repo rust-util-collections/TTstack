@@ -44,7 +44,7 @@ pub fn place_vm(
                 && (!check_images
                     || host_images
                         .get(&h.id)
-                        .map_or(false, |imgs| imgs.contains(&spec.image)))
+                        .is_some_and(|imgs| imgs.contains(&spec.image)))
         })
         .collect();
 

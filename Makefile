@@ -53,19 +53,19 @@ uninstall:
 
 ## Deploy tt-agent on this host (requires root, idempotent)
 deploy-agent: release
-	./tools/deploy.sh agent
+	sudo target/release/tt deploy agent
 
 ## Deploy tt-ctl (controller + web UI) on this host (requires root, idempotent)
 deploy-ctl: release
-	./tools/deploy.sh ctl
+	sudo target/release/tt deploy ctl
 
 ## Deploy both agent and controller on this host
 deploy: release
-	./tools/deploy.sh all
+	sudo target/release/tt deploy all
 
 ## Distributed deploy to all hosts in deploy.toml (via SSH)
 deploy-dist: release
-	./tools/deploy.sh -c deploy.toml
+	target/release/tt deploy dist deploy.toml
 
 ## Show available targets
 help:
@@ -91,3 +91,8 @@ help:
 	@echo ""
 	@echo "  Deployment (distributed, via SSH):"
 	@echo "    make deploy-dist  Deploy to fleet (reads deploy.toml)"
+	@echo ""
+	@echo "  Images (auto-generate guest images):"
+	@echo "    tt image recipes  List available image recipes"
+	@echo "    tt image create <name> [--image-dir DIR]"
+	@echo "    tt image create all --engine docker"
