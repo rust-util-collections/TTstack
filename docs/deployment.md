@@ -30,7 +30,7 @@ sudo tt deploy all --release-dir ./target/release
 The API key is printed on completion. Save it for CLI configuration:
 
 ```bash
-tt config 127.0.0.1:9200 -k <printed-api-key>
+tt config 127.0.0.1:9200 --api-key <printed-api-key>
 ```
 
 ## Distributed Deploy

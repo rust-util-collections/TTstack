@@ -48,7 +48,7 @@ To SSH into a QEMU VM:
 
 ```bash
 # Create environment with SSH port exposed
-tt env create myenv --image alpine-cloud --engine qemu -p 22
+tt env create myenv --image alpine-cloud --engine qemu --port 22
 
 # Show environment to see port mappings
 tt env show myenv

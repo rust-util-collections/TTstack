@@ -17,10 +17,10 @@ sudo tt deploy all                          # deploy agent + controller
 sudo tt image create all --engine docker    # generate Docker images
 sudo tt image create alpine-cloud           # generate QEMU cloud image (SSH-ready)
 
-tt config <controller-ip>:9200 -k <api-key> # key printed by deploy
+tt config <controller-ip>:9200 --api-key <api-key> # key printed by deploy
 tt host add <agent-ip>:9100                 # register a host
 
-tt env create demo -i alpine-cloud --engine qemu -p 22
+tt env create demo --image alpine-cloud --engine qemu --port 22
 tt env show demo                            # see port mappings
 ssh root@<host-ip> -p <mapped-port>         # password: ttstack
 ```
@@ -50,7 +50,7 @@ All `/api/*` endpoints require a Bearer token when `--api-key` is set
 api_key = "your-secret-key"
 
 # Or configure CLI directly:
-tt config <addr> -k <api-key>
+tt config <addr> --api-key <api-key>
 
 # Or via environment:
 export TT_API_KEY=your-secret-key
@@ -107,7 +107,7 @@ See [docs/guest-images.md](docs/guest-images.md) for custom image creation.
 ## CLI Reference
 
 ```
-tt config <addr> [-k <api-key>]     Set controller address and API key
+tt config <addr> [--api-key <api-key>]     Set controller address and API key
 tt status                           Fleet-wide status
 
 tt host add/list/show/remove        Manage hosts
