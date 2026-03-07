@@ -82,7 +82,7 @@ fn read_total_mem_mb() -> Option<u32> {
     #[cfg(target_os = "linux")]
     {
         let content = std::fs::read_to_string("/proc/meminfo").ok()?;
-        return parse_mem_total(&content);
+        parse_mem_total(&content)
     }
     #[cfg(target_os = "freebsd")]
     {
