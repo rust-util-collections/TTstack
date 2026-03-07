@@ -606,7 +606,7 @@ mod tests {
 
     #[test]
     fn ip_to_index_first() {
-        let ip = net::vm_ip(0); // "10.10.0.1"
+        let ip = net::vm_ip(0);
         assert_eq!(ip_to_index(&ip), Some(0));
     }
 
@@ -620,7 +620,6 @@ mod tests {
 
     #[test]
     fn ip_to_index_cross_octet() {
-        // vm_ip(253) → internal=254 → hi=1, lo=1 → "10.10.1.1"
         let ip = net::vm_ip(253);
         let roundtrip = ip_to_index(&ip);
         assert_eq!(roundtrip, Some(253), "ip={ip} roundtrip={roundtrip:?}");
@@ -631,5 +630,128 @@ mod tests {
         assert_eq!(ip_to_index("not-an-ip"), None);
         assert_eq!(ip_to_index("10.10.0"), None);
         assert_eq!(ip_to_index("10.10.x.1"), None);
+    }
+
+    // ── SQLite DB operations ────────────────────────────────────────
+
+    fn test_db() -> Connection {
+        let db = Connection::open(":memory:").unwrap();
+        init_db(&db).unwrap();
+        db
+    }
+
+    fn make_vm(id: &str, state: VmState) -> Vm {
+        Vm {
+            id: id.into(),
+            env_id: "env1".into(),
+            host_id: "h1".into(),
+            image: "ubuntu".into(),
+            engine: Engine::Qemu,
+            cpu: 2,
+            mem: 1024,
+            disk: 40960,
+            ip: "10.10.0.2".into(),
+            port_map: BTreeMap::new(),
+            state,
+            created_at: 1000,
+        }
+    }
+
+    #[test]
+    fn db_save_and_load_vm() {
+        let db = test_db();
+        let vm = make_vm("vm1", VmState::Running);
+        save_vm(&db, &vm).unwrap();
+
+        let loaded = load_vm(&db, "vm1").unwrap().unwrap();
+        assert_eq!(loaded.id, "vm1");
+        assert_eq!(loaded.state, VmState::Running);
+        assert_eq!(loaded.cpu, 2);
+    }
+
+    #[test]
+    fn db_load_nonexistent_vm() {
+        let db = test_db();
+        let result = load_vm(&db, "nope").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn db_load_all_vms() {
+        let db = test_db();
+        save_vm(&db, &make_vm("a", VmState::Running)).unwrap();
+        save_vm(&db, &make_vm("b", VmState::Stopped)).unwrap();
+        let all = load_all_vms(&db).unwrap();
+        assert_eq!(all.len(), 2);
+    }
+
+    #[test]
+    fn db_delete_vm() {
+        let db = test_db();
+        save_vm(&db, &make_vm("vm1", VmState::Running)).unwrap();
+        delete_vm(&db, "vm1").unwrap();
+        assert!(load_vm(&db, "vm1").unwrap().is_none());
+    }
+
+    #[test]
+    fn db_delete_nonexistent_vm() {
+        let db = test_db();
+        // Should not error
+        delete_vm(&db, "nope").unwrap();
+    }
+
+    #[test]
+    fn db_upsert_vm() {
+        let db = test_db();
+        let mut vm = make_vm("vm1", VmState::Creating);
+        save_vm(&db, &vm).unwrap();
+
+        vm.state = VmState::Running;
+        save_vm(&db, &vm).unwrap();
+
+        let loaded = load_vm(&db, "vm1").unwrap().unwrap();
+        assert_eq!(loaded.state, VmState::Running);
+        // Only one row
+        assert_eq!(load_all_vms(&db).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn db_schema_version_persisted() {
+        let db = test_db();
+        let ver = get_schema_version(&db).unwrap();
+        assert_eq!(ver, SCHEMA_VERSION);
+    }
+
+    // ── resolve_host_id ────────────────────────────────────────────
+
+    #[test]
+    fn resolve_host_id_generates_and_persists() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.db");
+        let path_str = path.to_str().unwrap();
+
+        let id1 = resolve_host_id(path_str, None).unwrap();
+        assert!(!id1.is_empty());
+        assert!(id1.len() <= 8);
+
+        // Second call returns the same persisted ID
+        let id2 = resolve_host_id(path_str, None).unwrap();
+        assert_eq!(id1, id2);
+    }
+
+    #[test]
+    fn resolve_host_id_cli_overrides() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.db");
+        let path_str = path.to_str().unwrap();
+
+        let id1 = resolve_host_id(path_str, None).unwrap();
+        let id2 = resolve_host_id(path_str, Some("custom-id".into())).unwrap();
+        assert_eq!(id2, "custom-id");
+        assert_ne!(id1, id2);
+
+        // Persisted the CLI override
+        let id3 = resolve_host_id(path_str, None).unwrap();
+        assert_eq!(id3, "custom-id");
     }
 }

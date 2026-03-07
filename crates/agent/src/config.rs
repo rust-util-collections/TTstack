@@ -73,6 +73,11 @@ impl Config {
 /// Read total system memory in MB from /proc/meminfo.
 fn read_total_mem_mb() -> Option<u32> {
     let content = std::fs::read_to_string("/proc/meminfo").ok()?;
+    parse_mem_total(&content)
+}
+
+/// Parse MemTotal from /proc/meminfo content.
+fn parse_mem_total(content: &str) -> Option<u32> {
     for line in content.lines() {
         if line.starts_with("MemTotal:") {
             let kb: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
@@ -80,4 +85,73 @@ fn read_total_mem_mb() -> Option<u32> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_meminfo() {
+        let content = "\
+MemTotal:       131696312 kB
+MemFree:         1234567 kB
+MemAvailable:    9876543 kB";
+        assert_eq!(parse_mem_total(content), Some(131696312 / 1024));
+    }
+
+    #[test]
+    fn parse_meminfo_missing() {
+        assert_eq!(parse_mem_total("nothing here"), None);
+    }
+
+    #[test]
+    fn parse_meminfo_malformed() {
+        assert_eq!(parse_mem_total("MemTotal: notanumber kB"), None);
+    }
+
+    #[test]
+    fn storage_kind_default() {
+        // Default is "raw"
+        let cfg = Config::parse_from(["tt-agent"]);
+        assert_eq!(cfg.storage_kind(), Storage::Raw);
+    }
+
+    #[test]
+    fn storage_kind_zfs() {
+        let cfg = Config::parse_from(["tt-agent", "--storage", "zfs"]);
+        assert_eq!(cfg.storage_kind(), Storage::Zfs);
+    }
+
+    #[test]
+    fn storage_kind_invalid_falls_back() {
+        let cfg = Config::parse_from(["tt-agent", "--storage", "foo"]);
+        assert_eq!(cfg.storage_kind(), Storage::Raw);
+    }
+
+    #[test]
+    fn effective_cpu_explicit() {
+        let cfg = Config::parse_from(["tt-agent", "--cpu-total", "16"]);
+        assert_eq!(cfg.effective_cpu(), 16);
+    }
+
+    #[test]
+    fn effective_cpu_auto() {
+        let cfg = Config::parse_from(["tt-agent"]);
+        // Auto-detect: should be > 0
+        assert!(cfg.effective_cpu() > 0);
+    }
+
+    #[test]
+    fn effective_mem_explicit() {
+        let cfg = Config::parse_from(["tt-agent", "--mem-total", "4096"]);
+        assert_eq!(cfg.effective_mem(), 4096);
+    }
+
+    #[test]
+    fn effective_mem_auto() {
+        let cfg = Config::parse_from(["tt-agent"]);
+        // On any real machine, should detect > 0
+        assert!(cfg.effective_mem() > 0);
+    }
 }
