@@ -74,7 +74,92 @@ impl QemuEngine {
                 &format!("unix:{},server,nowait", self.monitor_path(vm)),
             ])
             .args(["-vnc", "none"]);
+
+        // Attach cloud-init seed ISO if it exists (for cloud images)
+        let seed = self.seed_path(vm);
+        if Path::new(&seed).exists() {
+            cmd.args(["-drive", &format!("file={seed},format=raw,if=virtio,readonly=on")]);
+        }
+
         cmd
+    }
+
+    /// Generate a cloud-init NoCloud seed ISO for the VM.
+    ///
+    /// This allows cloud images (Alpine, Debian, Ubuntu) to auto-configure
+    /// on first boot: set root password, enable SSH, configure networking.
+    fn generate_seed_iso(&self, vm: &Vm) -> Result<()> {
+        let seed_dir = format!("{RUN_DIR}/seed-{}", vm.id);
+        std::fs::create_dir_all(&seed_dir).c(d!("create seed dir"))?;
+
+        // meta-data
+        let meta_data = format!("instance-id: {}\nlocal-hostname: {}\n", vm.id, vm.id);
+        std::fs::write(format!("{seed_dir}/meta-data"), meta_data).c(d!("write meta-data"))?;
+
+        // network-config (v2) — static IP on the virtio NIC
+        let network_config = format!(
+            r#"version: 2
+ethernets:
+  id0:
+    match:
+      driver: virtio_net
+    addresses:
+      - {ip}/16
+    routes:
+      - to: 0.0.0.0/0
+        via: 10.10.0.1
+    nameservers:
+      addresses:
+        - 8.8.8.8
+        - 1.1.1.1
+"#,
+            ip = vm.ip,
+        );
+        std::fs::write(format!("{seed_dir}/network-config"), network_config)
+            .c(d!("write network-config"))?;
+
+        // user-data — set root password and enable SSH
+        let user_data = r#"#cloud-config
+password: ttstack
+chpasswd:
+  expire: false
+ssh_pwauth: true
+disable_root: false
+runcmd:
+  - sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+  - systemctl restart sshd 2>/dev/null || service sshd restart 2>/dev/null || rc-service sshd restart 2>/dev/null || true
+"#;
+        std::fs::write(format!("{seed_dir}/user-data"), user_data).c(d!("write user-data"))?;
+
+        // Generate ISO using genisoimage or mkisofs
+        let seed_iso = self.seed_path(vm);
+        let meta = format!("{seed_dir}/meta-data");
+        let user = format!("{seed_dir}/user-data");
+        let netcfg = format!("{seed_dir}/network-config");
+
+        let output = if Path::new("/usr/bin/genisoimage").exists() {
+            Command::new("genisoimage")
+                .args(["-output", &seed_iso, "-volid", "cidata", "-joliet", "-rock", "-quiet"])
+                .args([&meta, &user, &netcfg])
+                .output()
+                .c(d!("generate seed ISO"))?
+        } else {
+            Command::new("mkisofs")
+                .args(["-o", &seed_iso, "-V", "cidata", "-J", "-R", "-quiet"])
+                .args([&meta, &user, &netcfg])
+                .output()
+                .c(d!("generate seed ISO"))?
+        };
+
+        // Clean up temp dir
+        let _ = std::fs::remove_dir_all(&seed_dir);
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(eg!("seed ISO creation failed: {}", stderr));
+        }
+
+        Ok(())
     }
 
     fn pid_path(&self, vm: &Vm) -> String {
@@ -83,6 +168,10 @@ impl QemuEngine {
 
     fn monitor_path(&self, vm: &Vm) -> String {
         format!("{RUN_DIR}/qemu-{}.sock", vm.id)
+    }
+
+    fn seed_path(&self, vm: &Vm) -> String {
+        format!("{RUN_DIR}/seed-{}.iso", vm.id)
     }
 
     fn read_pid(&self, vm: &Vm) -> Result<u32> {
@@ -99,6 +188,14 @@ impl QemuEngine {
 impl VmEngine for QemuEngine {
     fn create(&self, vm: &Vm, image_path: &str) -> Result<()> {
         std::fs::create_dir_all(RUN_DIR).c(d!("create runtime dir"))?;
+
+        // Generate cloud-init seed ISO (best-effort; non-cloud images ignore it)
+        if let Err(e) = self.generate_seed_iso(vm) {
+            eprintln!(
+                "[qemu] WARN: could not create seed ISO for {}: {e} (cloud-init may not work)",
+                vm.id
+            );
+        }
 
         let output = self
             .build_cmd(vm, image_path)
@@ -166,6 +263,7 @@ impl VmEngine for QemuEngine {
 
         let _ = std::fs::remove_file(self.pid_path(vm));
         let _ = std::fs::remove_file(self.monitor_path(vm));
+        let _ = std::fs::remove_file(self.seed_path(vm));
 
         Ok(())
     }

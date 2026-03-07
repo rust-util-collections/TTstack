@@ -22,6 +22,75 @@ sudo tt image create fc-alpine --image-dir /home/ttstack/images
 sudo tt image create alpine-cloud --image-dir /home/ttstack/images
 ```
 
+## Accessing VMs
+
+How to log into VMs depends on the engine:
+
+| Engine | Access Method | Credentials |
+|--------|--------------|-------------|
+| **QEMU** (cloud images) | SSH via port forwarding | root / `ttstack` |
+| **QEMU** (custom images) | SSH via port forwarding | Whatever you configured in the image |
+| **Docker** | `docker exec -it <container-id> sh` | N/A (no password needed) |
+| **Firecracker** | Serial console only (no SSH by default) | N/A |
+| **Jail** (FreeBSD) | `jexec <jail-name> sh` from the host | N/A |
+| **Bhyve** (FreeBSD) | SSH via port forwarding | Depends on the image |
+
+### QEMU Cloud Images (SSH)
+
+For built-in cloud images (`alpine-cloud`, `debian-cloud`, `ubuntu-cloud`),
+TTstack auto-generates a **cloud-init seed ISO** on each VM boot that:
+
+- Sets the root password to `ttstack`
+- Enables SSH password authentication
+- Configures the VM's network (static IP, gateway, DNS)
+
+To SSH into a QEMU VM:
+
+```bash
+# Create environment with SSH port exposed
+tt env create myenv --image alpine-cloud --engine qemu -p 22
+
+# Show environment to see port mappings
+tt env show myenv
+# Example output:
+#   ID             IMAGE         ENGINE   STATE    IP             PORTS
+#   abc12345-678   alpine-cloud  qemu     running  10.10.0.3      20100->22
+
+# SSH using the mapped port
+ssh root@<host-ip> -p 20100
+# Password: ttstack
+```
+
+For custom QEMU images that do not use cloud-init, the seed ISO
+is harmlessly ignored — you manage SSH credentials yourself.
+
+### Docker Containers
+
+Docker containers are managed via the Docker runtime. Access
+from the host machine:
+
+```bash
+# Find the container ID
+docker ps | grep <vm-id>
+
+# Exec into the container
+docker exec -it <container-id> sh
+```
+
+### Firecracker MicroVMs
+
+Firecracker VMs boot into a shell on the serial console but have
+no SSH daemon by default. They are designed for headless workloads.
+To add SSH, customize the rootfs image with an OpenSSH server.
+
+### FreeBSD Jails
+
+Jails are accessed from the host:
+
+```bash
+jexec <jail-name> sh
+```
+
 ## Image Formats by Engine
 
 ### Docker / Podman

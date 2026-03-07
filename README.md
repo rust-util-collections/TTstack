@@ -85,11 +85,15 @@ tt env create my-test \
   --dup 2 \
   --port 22 --port 80
 
-tt env show my-test                 # see VM details
+tt env show my-test                 # see VM details + port mappings
+ssh root@<host-ip> -p <mapped-port> # SSH into a QEMU VM (password: ttstack)
 tt env stop my-test                 # pause all VMs
 tt env start my-test                # resume
 tt env delete my-test               # destroy everything
 ```
+
+QEMU cloud images auto-configure via cloud-init: root password `ttstack`,
+SSH enabled. See [docs/guest-images.md](docs/guest-images.md) for details.
 
 ### 3. Web dashboard
 
