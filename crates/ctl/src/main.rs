@@ -86,9 +86,7 @@ async fn main() {
         .with_state(state);
 
     let api_routes = if let Some(key) = cfg.api_key {
-        api_routes.layer(axum::middleware::from_fn(
-            auth::make_auth_layer(key),
-        ))
+        api_routes.layer(axum::middleware::from_fn(auth::make_auth_layer(key)))
     } else {
         api_routes
     };

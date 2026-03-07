@@ -78,7 +78,10 @@ impl QemuEngine {
         // Attach cloud-init seed ISO if it exists (for cloud images)
         let seed = self.seed_path(vm);
         if Path::new(&seed).exists() {
-            cmd.args(["-drive", &format!("file={seed},format=raw,if=virtio,readonly=on")]);
+            cmd.args([
+                "-drive",
+                &format!("file={seed},format=raw,if=virtio,readonly=on"),
+            ]);
         }
 
         cmd
@@ -139,7 +142,9 @@ runcmd:
 
         let output = if Path::new("/usr/bin/genisoimage").exists() {
             Command::new("genisoimage")
-                .args(["-output", &seed_iso, "-volid", "cidata", "-joliet", "-rock", "-quiet"])
+                .args([
+                    "-output", &seed_iso, "-volid", "cidata", "-joliet", "-rock", "-quiet",
+                ])
                 .args([&meta, &user, &netcfg])
                 .output()
                 .c(d!("generate seed ISO"))?

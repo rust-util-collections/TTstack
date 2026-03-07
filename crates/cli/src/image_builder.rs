@@ -109,10 +109,22 @@ fn docker_tag(name: &str) -> &str {
 }
 
 async fn detect_runtime() -> Result<&'static str> {
-    if Command::new("docker").arg("version").output().await.map(|o| o.status.success()).unwrap_or(false) {
+    if Command::new("docker")
+        .arg("version")
+        .output()
+        .await
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
         return Ok("docker");
     }
-    if Command::new("podman").arg("version").output().await.map(|o| o.status.success()).unwrap_or(false) {
+    if Command::new("podman")
+        .arg("version")
+        .output()
+        .await
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
         return Ok("podman");
     }
     Err(eg!("neither docker nor podman found"))
@@ -136,10 +148,7 @@ async fn create_docker(name: &str) -> Result<()> {
 
     // Tag as the short name so `tt env create --image alpine` works
     if tag != name {
-        let _ = Command::new(rt)
-            .args(["tag", tag, name])
-            .output()
-            .await;
+        let _ = Command::new(rt).args(["tag", tag, name]).output().await;
     }
 
     println!("[image] {name} ready ({rt})");
@@ -152,8 +161,7 @@ const FC_KERNEL_URL: &str =
     "https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/x86_64/kernels/vmlinux.bin";
 
 /// Alpine rootfs mirror.
-const ALPINE_MINIROOTFS_URL: &str =
-    "https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/x86_64/alpine-minirootfs-3.21.3-x86_64.tar.gz";
+const ALPINE_MINIROOTFS_URL: &str = "https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/x86_64/alpine-minirootfs-3.21.3-x86_64.tar.gz";
 
 async fn create_firecracker(name: &str, image_dir: &Path) -> Result<()> {
     let target = image_dir.join(name);
@@ -181,18 +189,30 @@ async fn create_firecracker(name: &str, image_dir: &Path) -> Result<()> {
     println!("[image] creating {rootfs_mb}MB rootfs with Alpine userspace...");
 
     // Create empty ext4 image
-    run_cmd("dd", &[
-        "if=/dev/zero",
-        &format!("of={}", rootfs.display()),
-        "bs=1M",
-        &format!("count={rootfs_mb}"),
-    ])
+    run_cmd(
+        "dd",
+        &[
+            "if=/dev/zero",
+            &format!("of={}", rootfs.display()),
+            "bs=1M",
+            &format!("count={rootfs_mb}"),
+        ],
+    )
     .await?;
     run_cmd("mkfs.ext4", &["-q", &rootfs.display().to_string()]).await?;
 
     // Mount and populate
     let mnt = tempdir()?;
-    run_cmd("mount", &["-o", "loop", &rootfs.display().to_string(), &mnt.display().to_string()]).await?;
+    run_cmd(
+        "mount",
+        &[
+            "-o",
+            "loop",
+            &rootfs.display().to_string(),
+            &mnt.display().to_string(),
+        ],
+    )
+    .await?;
 
     // Download and extract Alpine minirootfs
     let tarball = format!("{}/alpine.tar.gz", mnt.display());
@@ -225,7 +245,9 @@ fi
 "#
     );
     let init_path = format!("{}/init", mnt.display());
-    tokio::fs::write(&init_path, init_script).await.c(d!("write init"))?;
+    tokio::fs::write(&init_path, init_script)
+        .await
+        .c(d!("write init"))?;
     run_cmd("chmod", &["755", &init_path]).await?;
 
     // Ensure /sbin/init symlink
@@ -264,9 +286,9 @@ fn qemu_cloud_url(name: &str) -> Option<&'static str> {
         "debian-cloud" => Some(
             "https://cloud.debian.org/images/cloud/trixie/daily/latest/debian-13-generic-amd64-daily.qcow2",
         ),
-        "ubuntu-cloud" => Some(
-            "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img",
-        ),
+        "ubuntu-cloud" => {
+            Some("https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img")
+        }
         _ => None,
     }
 }
@@ -279,8 +301,7 @@ async fn create_qemu(name: &str, image_dir: &Path) -> Result<()> {
         return Ok(());
     }
 
-    let url = qemu_cloud_url(name)
-        .ok_or_else(|| eg!("unknown QEMU image: {name}"))?;
+    let url = qemu_cloud_url(name).ok_or_else(|| eg!("unknown QEMU image: {name}"))?;
 
     println!("[image] downloading {name} cloud image...");
     download_file(url, &target).await?;
@@ -293,7 +314,15 @@ async fn create_qemu(name: &str, image_dir: &Path) -> Result<()> {
         tokio::fs::rename(&target, &tmp).await.c(d!("rename"))?;
         run_cmd(
             "qemu-img",
-            &["convert", "-f", "raw", "-O", "qcow2", &tmp.display().to_string(), &target.display().to_string()],
+            &[
+                "convert",
+                "-f",
+                "raw",
+                "-O",
+                "qcow2",
+                &tmp.display().to_string(),
+                &target.display().to_string(),
+            ],
         )
         .await?;
         tokio::fs::remove_file(&tmp).await.ok();
@@ -325,9 +354,7 @@ async fn create_jail(name: &str, image_dir: &Path) -> Result<()> {
 
     // Extract major version for URL
     let major = ver.split('.').next().unwrap_or("14");
-    let url = format!(
-        "https://download.freebsd.org/releases/amd64/{major}.3-RELEASE/base.txz"
-    );
+    let url = format!("https://download.freebsd.org/releases/amd64/{major}.3-RELEASE/base.txz");
 
     let txz = format!("{}/base.txz", target.display());
     download_file(&url, Path::new(&txz)).await?;
@@ -488,8 +515,7 @@ mod tests {
 
     #[test]
     fn all_engines_covered() {
-        let engines: std::collections::HashSet<&str> =
-            RECIPES.iter().map(|r| r.engine).collect();
+        let engines: std::collections::HashSet<&str> = RECIPES.iter().map(|r| r.engine).collect();
         assert!(engines.contains("docker"));
         assert!(engines.contains("firecracker"));
         assert!(engines.contains("qemu"));

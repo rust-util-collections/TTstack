@@ -10,12 +10,14 @@ use axum::response::{IntoResponse, Response};
 /// Returns a closure suitable for `axum::middleware::from_fn`.
 pub fn make_auth_layer(
     expected_key: String,
-) -> impl Fn(Request<Body>, Next) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send>>
-       + Clone
-       + Send
-       + Sync
-       + 'static
-{
+) -> impl Fn(
+    Request<Body>,
+    Next,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send>>
++ Clone
++ Send
++ Sync
++ 'static {
     move |req: Request<Body>, next: Next| {
         let expected = expected_key.clone();
         Box::pin(async move {
@@ -30,7 +32,9 @@ pub fn make_auth_layer(
                 }
                 _ => (
                     StatusCode::UNAUTHORIZED,
-                    axum::Json(ttcore::api::ApiResp::<()>::err("invalid or missing API key")),
+                    axum::Json(ttcore::api::ApiResp::<()>::err(
+                        "invalid or missing API key",
+                    )),
                 )
                     .into_response(),
             }

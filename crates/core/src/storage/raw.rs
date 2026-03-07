@@ -78,7 +78,9 @@ mod tests {
         std::fs::write(&base, b"image-data").unwrap();
 
         let store = RawStore;
-        store.clone_image(base.to_str().unwrap(), clone.to_str().unwrap()).unwrap();
+        store
+            .clone_image(base.to_str().unwrap(), clone.to_str().unwrap())
+            .unwrap();
         assert!(clone.exists());
         assert_eq!(std::fs::read(&clone).unwrap(), b"image-data");
 
@@ -95,7 +97,9 @@ mod tests {
         std::fs::write(base_dir.join("disk.qcow2"), b"data").unwrap();
 
         let store = RawStore;
-        store.clone_image(base_dir.to_str().unwrap(), clone_dir.to_str().unwrap()).unwrap();
+        store
+            .clone_image(base_dir.to_str().unwrap(), clone_dir.to_str().unwrap())
+            .unwrap();
         assert!(clone_dir.join("disk.qcow2").exists());
 
         store.remove_image(clone_dir.to_str().unwrap()).unwrap();

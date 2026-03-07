@@ -52,7 +52,11 @@ fn generate_api_key() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    format!("tt-{:016x}{:016x}", seed, seed.wrapping_mul(6364136223846793005))
+    format!(
+        "tt-{:016x}{:016x}",
+        seed,
+        seed.wrapping_mul(6364136223846793005)
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -141,9 +145,12 @@ impl SshTarget {
     async fn exec(&self, cmd: &str) -> Result<String> {
         let output = Command::new("ssh")
             .args([
-                "-o", "StrictHostKeyChecking=no",
-                "-o", "ConnectTimeout=10",
-                "-p", &self.port.to_string(),
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "ConnectTimeout=10",
+                "-p",
+                &self.port.to_string(),
             ])
             .arg(format!("{}@{}", self.user, self.host))
             .arg(cmd)
@@ -161,9 +168,12 @@ impl SshTarget {
     async fn copy(&self, local: &Path, remote: &str) -> Result<()> {
         let output = Command::new("scp")
             .args([
-                "-o", "StrictHostKeyChecking=no",
-                "-o", "ConnectTimeout=10",
-                "-P", &self.port.to_string(),
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "ConnectTimeout=10",
+                "-P",
+                &self.port.to_string(),
             ])
             .arg(local)
             .arg(format!("{}@{}:{}", self.user, self.host, remote))
@@ -251,11 +261,7 @@ fn remote_setup_script(
 ) -> String {
     let bin_copies: String = binaries
         .iter()
-        .map(|b| {
-            format!(
-                "sudo cp {tmp}/{b} {prefix}/bin/{b}\nsudo chmod 755 {prefix}/bin/{b}",
-            )
-        })
+        .map(|b| format!("sudo cp {tmp}/{b} {prefix}/bin/{b}\nsudo chmod 755 {prefix}/bin/{b}",))
         .collect::<Vec<_>>()
         .join("\n");
 
@@ -356,7 +362,15 @@ async fn local_ensure_user(user: &str) -> Result<()> {
     } else {
         println!("[deploy] creating user '{user}'");
         let out = Command::new("useradd")
-            .args(["-r", "-m", "-d", &format!("/home/{user}"), "-s", "/bin/sh", user])
+            .args([
+                "-r",
+                "-m",
+                "-d",
+                &format!("/home/{user}"),
+                "-s",
+                "/bin/sh",
+                user,
+            ])
             .output()
             .await
             .c(d!("create user"))?;
@@ -383,7 +397,9 @@ async fn local_ensure_dirs(home: &str, user: &str) -> Result<()> {
 
 async fn local_install_bin(src: &Path, prefix: &str) -> Result<()> {
     let bin_dir = format!("{prefix}/bin");
-    tokio::fs::create_dir_all(&bin_dir).await.c(d!("mkdir bin"))?;
+    tokio::fs::create_dir_all(&bin_dir)
+        .await
+        .c(d!("mkdir bin"))?;
 
     let name = src.file_name().unwrap().to_str().unwrap();
     let dst = format!("{bin_dir}/{name}");
@@ -477,7 +493,10 @@ pub async fn deploy_local(role: &str, release_dir: &str) -> Result<()> {
         "agent" | "all" => {
             let bin = release.join("tt-agent");
             if !bin.exists() {
-                return Err(eg!("{} not found (run 'cargo build --release' first)", bin.display()));
+                return Err(eg!(
+                    "{} not found (run 'cargo build --release' first)",
+                    bin.display()
+                ));
             }
             local_install_bin(&bin, prefix).await?;
 
@@ -521,10 +540,9 @@ pub async fn deploy_local(role: &str, release_dir: &str) -> Result<()> {
 
 /// Distributed deploy from a config file.
 pub async fn deploy_distributed(config_path: &str) -> Result<()> {
-    let content = std::fs::read_to_string(config_path)
-        .c(d!("read config"))?;
-    let cfg: DeployConfig = toml::from_str(&content)
-        .map_err(|e| eg!(format!("parse deploy.toml: {e}")))?;
+    let content = std::fs::read_to_string(config_path).c(d!("read config"))?;
+    let cfg: DeployConfig =
+        toml::from_str(&content).map_err(|e| eg!(format!("parse deploy.toml: {e}")))?;
 
     let release_dir = PathBuf::from(&cfg.general.release_dir);
     let prefix = &cfg.general.prefix;
@@ -535,7 +553,10 @@ pub async fn deploy_distributed(config_path: &str) -> Result<()> {
     for bin in ["tt", "tt-ctl", "tt-agent"] {
         let p = release_dir.join(bin);
         if !p.exists() {
-            return Err(eg!("{} not found (run 'cargo build --release')", p.display()));
+            return Err(eg!(
+                "{} not found (run 'cargo build --release')",
+                p.display()
+            ));
         }
     }
 
@@ -554,11 +575,16 @@ pub async fn deploy_distributed(config_path: &str) -> Result<()> {
         target.exec(&format!("mkdir -p {tmp}")).await?;
 
         for bin in ["tt-ctl", "tt"] {
-            target.copy(&release_dir.join(bin), &format!("{tmp}/{bin}")).await?;
+            target
+                .copy(&release_dir.join(bin), &format!("{tmp}/{bin}"))
+                .await?;
             println!("[deploy] uploaded {bin}");
         }
 
-        let data_dir = ctl.data_dir.clone().unwrap_or_else(|| format!("{home}/ctl"));
+        let data_dir = ctl
+            .data_dir
+            .clone()
+            .unwrap_or_else(|| format!("{home}/ctl"));
         let exec_cmd = format!(
             "{prefix}/bin/tt-ctl --listen {listen} --data-dir {data_dir} --api-key {api_key}",
             listen = ctl.listen,
@@ -643,9 +669,11 @@ pub async fn deploy_distributed(config_path: &str) -> Result<()> {
     println!("\n[deploy] distributed deployment complete");
     println!("[deploy] API key: {api_key}");
     if let Some(ctl) = &cfg.controller {
-        println!("[deploy] Run: tt config {}:{} -k {api_key}",
+        println!(
+            "[deploy] Run: tt config {}:{} -k {api_key}",
             ctl.host,
-            ctl.listen.rsplit(':').next().unwrap_or("9200"));
+            ctl.listen.rsplit(':').next().unwrap_or("9200")
+        );
     }
     Ok(())
 }

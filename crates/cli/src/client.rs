@@ -130,7 +130,10 @@ pub fn load_config() -> Option<CliConfig> {
     if addr.is_empty() {
         return None;
     }
-    let api_key = lines.next().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let api_key = lines
+        .next()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
     Some(CliConfig { addr, api_key })
 }
 

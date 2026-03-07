@@ -50,7 +50,10 @@ pub fn place_vm(
 
     if candidates.is_empty() {
         // Provide a more helpful error message
-        let online = hosts.iter().filter(|h| h.state == HostState::Online).count();
+        let online = hosts
+            .iter()
+            .filter(|h| h.state == HostState::Online)
+            .count();
         let with_engine = hosts
             .iter()
             .filter(|h| h.state == HostState::Online && h.engines.contains(&spec.engine))
@@ -67,10 +70,7 @@ pub fn place_vm(
         if online == 0 {
             return Err(eg!("no online hosts available"));
         } else if with_engine == 0 {
-            return Err(eg!(
-                "no online host supports engine={}",
-                spec.engine,
-            ));
+            return Err(eg!("no online host supports engine={}", spec.engine,));
         } else if with_resource == 0 {
             return Err(eg!(
                 "no host has enough resources for engine={}, cpu={}, mem={}MB, disk={}MB",
@@ -173,10 +173,7 @@ mod tests {
 
     fn images_for(host_id: &str, imgs: &[&str]) -> HashMap<String, HashSet<String>> {
         let mut m = HashMap::new();
-        m.insert(
-            host_id.into(),
-            imgs.iter().map(|s| s.to_string()).collect(),
-        );
+        m.insert(host_id.into(), imgs.iter().map(|s| s.to_string()).collect());
         m
     }
 

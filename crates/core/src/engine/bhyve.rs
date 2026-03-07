@@ -96,7 +96,10 @@ impl VmEngine for BhyveEngine {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             // Not fatal — the VM device may already be gone
-            eprintln!("[bhyve] WARN: bhyvectl --destroy failed for {}: {}", vm.id, stderr);
+            eprintln!(
+                "[bhyve] WARN: bhyvectl --destroy failed for {}: {}",
+                vm.id, stderr
+            );
         }
 
         Ok(())
