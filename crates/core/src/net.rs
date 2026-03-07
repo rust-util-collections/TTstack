@@ -225,7 +225,7 @@ mod platform {
             return Ok(());
         }
 
-        run(&["ifconfig", "bridge", "create"])?;
+        run(&["ifconfig", "bridge", "create", "name", BRIDGE_NAME])?;
         run(&["ifconfig", BRIDGE_NAME, "inet", BRIDGE_CIDR])?;
         run(&["ifconfig", BRIDGE_NAME, "up"])?;
 
@@ -243,7 +243,7 @@ mod platform {
     pub fn create_tap(vm_id: &str) -> Result<()> {
         let tap = tap_name(vm_id);
 
-        run(&["ifconfig", &tap, "create"])?;
+        run(&["ifconfig", "tap", "create", "name", &tap])?;
         run(&["ifconfig", BRIDGE_NAME, "addm", &tap])?;
         run(&["ifconfig", &tap, "up"])?;
 
